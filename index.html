@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Cloud Instance Optimizer</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#05070f;--s1:#080b16;--s2:#0c1020;--s3:#101528;--s4:#161d32;--s5:#1c253c;
+  --br:#1e2840;--br2:#263050;
+  --t1:#eef0ff;--t2:#8d97d4;--t3:#4f5a8a;--t4:#2e3660;
+  --i:#6c63ff;--i2:#9b95ff;--tl:#00e5c3;--pk:#ff6b9d;--am:#ffb347;--sky:#4fc3f7;
+  --aws:#ff9900;--azure:#2196f3;--grn:#00e5a0;--red:#ff4444;--yl:#ffd93d;
+}
+html,body{width:100%;height:100vh;background:var(--bg);font-family:'Outfit',sans-serif;color:var(--t1);overflow:hidden;position:relative}
+
+/* ANIMATED BACKGROUND EFFECTS */
+.bg-effects{position:fixed;inset:0;pointer-events:none;z-index:2;overflow:hidden}
+.snow{position:absolute;border-radius:50%;background:rgba(255,255,255,.7);animation:fall linear infinite}
+@keyframes fall{0%{transform:translateY(-10px) translateX(0) rotate(0deg);opacity:0}10%{opacity:.8}90%{opacity:.6}100%{transform:translateY(100vh) translateX(var(--drift)) rotate(360deg);opacity:0}}
+.glow-orb{position:absolute;border-radius:50%;filter:blur(80px);opacity:.15;animation:pulse 8s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:scale(1);opacity:.12}50%{transform:scale(1.3);opacity:.2}}
+
+.top-bar{height:3px;background:linear-gradient(90deg,var(--i),var(--tl),var(--pk),var(--i));background-size:300% 100%;animation:sweep 4s ease-in-out infinite;position:relative;z-index:10}
+@keyframes sweep{0%,100%{background-position:0%}50%{background-position:100%}}
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:11px 22px;border-bottom:1px solid var(--br);background:rgba(8,11,22,.97);backdrop-filter:blur(10px);position:sticky;top:0;z-index:300;box-shadow:0 4px 24px rgba(0,0,0,.3)}
+.logo-box{width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,var(--s3),var(--s4));border:1px solid var(--br2);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:var(--i);box-shadow:0 2px 8px rgba(108,99,255,.25),inset 0 1px 0 rgba(255,255,255,.1);transition:transform .2s,box-shadow .2s}
+.logo-box:hover{transform:translateY(-2px) scale(1.05);box-shadow:0 6px 20px rgba(108,99,255,.4),inset 0 1px 0 rgba(255,255,255,.15)}
+.hdr-title{font-size:15px;font-weight:700;background:linear-gradient(135deg,var(--i2),var(--tl));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hdr-sub{font-size:10px;color:var(--t3);font-family:'JetBrains Mono',monospace}
+.conn-badge{display:flex;align-items:center;gap:9px;background:var(--s2);border:1px solid var(--br);border-radius:9px;padding:6px 12px;box-shadow:0 2px 6px rgba(0,0,0,.2);transition:transform .2s,box-shadow .2s}
+.conn-badge:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,229,160,.2)}
+.sonar{position:relative;width:18px;height:18px;flex-shrink:0}
+.s-dot{width:7px;height:7px;background:var(--grn);border-radius:50%;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);box-shadow:0 0 8px var(--grn)}
+.s-ring{position:absolute;top:50%;left:50%;width:7px;height:7px;border-radius:50%;border:1.5px solid var(--grn);transform:translate(-50%,-50%);animation:sonar 2s ease-out infinite;opacity:0}
+.s-ring:nth-child(2){animation-delay:.7s}.s-ring:nth-child(3){animation-delay:1.4s}
+@keyframes sonar{0%{transform:translate(-50%,-50%) scale(1);opacity:.65}100%{transform:translate(-50%,-50%) scale(3.8);opacity:0}}
+.conn-lbl{font-size:11px;font-weight:600;color:var(--grn);text-shadow:0 0 8px rgba(0,229,160,.4)}.conn-lat{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3)}
+.pill{padding:3px 9px;border-radius:20px;font-size:10px;font-family:'JetBrains Mono',monospace;font-weight:600;border:1px solid;transition:transform .2s,box-shadow .2s}
+.pill-aws{background:rgba(255,153,0,.07);border-color:rgba(255,153,0,.2);color:var(--aws);box-shadow:0 0 12px rgba(255,153,0,.15)}
+.pill-aws:hover{transform:scale(1.05);box-shadow:0 0 20px rgba(255,153,0,.3)}
+.pill-az{background:rgba(33,150,243,.07);border-color:rgba(33,150,243,.2);color:var(--azure);box-shadow:0 0 12px rgba(33,150,243,.15)}
+.pill-az:hover{transform:scale(1.05);box-shadow:0 0 20px rgba(33,150,243,.3)}
+.app-body{display:grid;grid-template-columns:320px 1fr;height:calc(100vh - 57px);position:relative;z-index:1;overflow:hidden}
+.sidebar{background:linear-gradient(180deg,var(--s1),rgba(8,11,22,.95));border-right:1px solid var(--br);display:flex;flex-direction:column;position:relative;overflow:hidden;backdrop-filter:blur(10px);height:100%}
+.particles{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:0}
+.ptcl{position:absolute;border-radius:50%;animation:drift linear infinite;opacity:0;box-shadow:0 0 6px currentColor}
+@keyframes drift{0%{transform:translateY(0) translateX(0) scale(0);opacity:0}10%{opacity:.5;transform:scale(1)}90%{opacity:.35}100%{transform:translateY(-120px) translateX(var(--dx)) scale(1.2);opacity:0}}
+.sb-inner{position:relative;z-index:1;display:flex;flex-direction:column;flex:1;overflow:hidden}
+.sb-tabs{display:flex;border-bottom:1px solid var(--br);flex-shrink:0;background:rgba(16,21,40,.6)}
+.sb-tab{flex:1;padding:10px 0;text-align:center;font-size:11px;font-weight:600;cursor:pointer;color:var(--t3);border-bottom:2px solid transparent;transition:.2s;position:relative;user-select:none}
+.sb-tab:hover{color:var(--i2);background:rgba(108,99,255,.05)}
+.sb-tab.active{color:var(--i);border-bottom-color:var(--i);background:rgba(108,99,255,.08)}
+.tab-badge{position:absolute;top:6px;right:8px;background:var(--i);color:white;font-size:9px;border-radius:8px;padding:1px 5px;font-family:'JetBrains Mono',monospace;box-shadow:0 2px 6px rgba(108,99,255,.5)}
+.sb-pane{flex:1;overflow-y:auto;display:none;flex-direction:column}
+.sb-pane.active{display:flex}
+.sb-sec{padding:11px 14px;border-bottom:1px solid var(--br);flex-shrink:0;transition:background .2s}
+.sb-sec:hover{background:rgba(108,99,255,.02)}
+.sec-hdr{display:flex;align-items:center;gap:7px;margin-bottom:8px}
+.sec-ico{width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;transition:transform .2s}
+.sec-hdr:hover .sec-ico{transform:scale(1.1) rotate(5deg)}
+.sec-lbl{font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--t3);letter-spacing:2px;text-transform:uppercase}
+.fg{display:flex;flex-direction:column;gap:3px;margin-bottom:7px}
+.fg:last-child{margin-bottom:0}
+.fl{font-size:11px;color:var(--t2);font-weight:500}
+.fi-wrap{position:relative}
+.fi,.fs{width:100%;background:var(--s3);border:1px solid var(--br);border-radius:6px;color:var(--t1);font-family:'Outfit',sans-serif;font-size:12px;padding:7px 9px 7px 28px;outline:none;transition:border-color .2s,box-shadow .2s,background .2s}
+.fi:hover,.fs:hover{background:var(--s4)}
+.fi:focus,.fs:focus{border-color:var(--i);box-shadow:0 0 0 3px rgba(108,99,255,.12),0 0 16px rgba(108,99,255,.2)}
+.fi-ico{position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--t3);pointer-events:none;transition:color .2s}
+.fi:focus~.fi-ico,.fs:focus~.fi-ico{color:var(--i);animation:iconPulse .5s ease-in-out}
+@keyframes iconPulse{0%,100%{transform:translateY(-50%) scale(1)}50%{transform:translateY(-50%) scale(1.2)}}
+.fi-row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+
+/* REGION DD */
+.rgn-wrap{position:relative}
+.rgn-trig{background:var(--s3);border:1px solid var(--br);border-radius:6px;padding:6px 9px;cursor:pointer;display:flex;align-items:center;min-height:32px;user-select:none;transition:border-color .2s,background .2s,transform .2s;gap:5px}
+.rgn-trig:hover{background:var(--s4);transform:scale(1.01)}
+.rgn-trig.open{border-color:var(--i);box-shadow:0 0 0 3px rgba(108,99,255,.1)}
+.rtags{display:flex;flex-wrap:wrap;gap:3px;flex:1}
+.rtag{background:rgba(108,99,255,.15);border:1px solid rgba(108,99,255,.27);color:#aba5ff;border-radius:3px;font-size:10px;padding:1px 5px;font-family:'JetBrains Mono',monospace;display:flex;align-items:center;gap:3px;transition:transform .15s}
+.rtag:hover{transform:scale(1.05)}
+.rtag-x{cursor:pointer;opacity:.55;font-size:11px;transition:opacity .2s}.rtag-x:hover{opacity:1;color:var(--red)}
+.rgn-chev{font-size:10px;color:var(--t3);transition:transform .2s;flex-shrink:0}
+.rgn-chev.open{transform:rotate(180deg)}
+.rgn-dd{position:absolute;top:calc(100% + 3px);left:0;right:0;background:var(--s3);border:1px solid var(--br2);border-radius:9px;z-index:500;display:none;box-shadow:0 18px 45px rgba(0,0,0,.7),0 0 60px rgba(108,99,255,.15);overflow:hidden;backdrop-filter:blur(10px)}
+.rgn-dd.show{display:block;animation:slideDown .2s ease-out}
+@keyframes slideDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+.rgn-search{padding:7px 9px;border-bottom:1px solid var(--br)}
+.rgn-search input{width:100%;background:var(--s4);border:1px solid var(--br);border-radius:4px;color:var(--t1);font-size:11px;padding:5px 8px;outline:none;transition:border-color .2s}
+.rgn-search input:focus{border-color:var(--i)}
+.rgn-list{max-height:180px;overflow-y:auto;padding:4px}
+.rg-lbl{font-size:9px;color:var(--t4);font-family:'JetBrains Mono',monospace;letter-spacing:1.5px;text-transform:uppercase;padding:5px 7px 2px}
+.ropt{display:flex;align-items:center;gap:7px;padding:5px 7px;border-radius:4px;cursor:pointer;font-size:11px;color:var(--t2);transition:background .1s,transform .1s}
+.ropt:hover{background:var(--s5);color:var(--t1);transform:translateX(3px)}
+.ropt.sel{background:rgba(108,99,255,.13);color:#aba5ff}
+.rchk{width:12px;height:12px;border-radius:3px;border:1px solid var(--br2);display:flex;align-items:center;justify-content:center;font-size:9px;flex-shrink:0;transition:all .2s}
+.ropt.sel .rchk{background:var(--i);border-color:var(--i);color:white;box-shadow:0 2px 8px rgba(108,99,255,.4)}
+.rgn-foot{padding:6px 9px;border-top:1px solid var(--br);display:flex;justify-content:space-between;font-size:10px}
+.rf-cnt{color:var(--t3);font-family:'JetBrains Mono',monospace}.rf-clr{color:var(--pk);cursor:pointer;transition:color .2s}
+.rf-clr:hover{color:var(--red)}
+
+/* DROP ZONE - 3D CARD EFFECT */
+.drop-z{border:1.5px dashed var(--br2);border-radius:8px;padding:12px;text-align:center;cursor:pointer;background:linear-gradient(135deg,var(--s3),var(--s2));position:relative;overflow:hidden;transition:all .3s;transform-style:preserve-3d;box-shadow:0 4px 12px rgba(0,0,0,.2)}
+.drop-z::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(108,99,255,.05),rgba(0,229,195,.05));opacity:0;transition:opacity .3s}
+.drop-z:hover{border-color:var(--i);transform:translateY(-2px) scale(1.01);box-shadow:0 8px 24px rgba(108,99,255,.25)}
+.drop-z:hover::before{opacity:1}
+.drop-z.file-ok{border-color:var(--grn);box-shadow:0 4px 16px rgba(0,229,160,.3)}
+.drop-z input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.drop-icon{font-size:18px;color:var(--t3);margin-bottom:2px;transition:transform .3s,color .3s}
+.drop-z:hover .drop-icon{transform:scale(1.15) translateY(-2px);color:var(--i)}
+.drop-main{font-size:11px;color:var(--t2)}.drop-sub{font-size:10px;color:var(--t4);font-family:'JetBrains Mono',monospace}
+.file-status{margin-top:6px;padding:5px 8px;border-radius:6px;font-size:11px;font-family:'JetBrains Mono',monospace;display:none;animation:slideIn .3s ease-out}
+@keyframes slideIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+.file-ok{background:rgba(0,229,160,.08);border:1px solid rgba(0,229,160,.2);color:var(--grn)}
+.file-err{background:rgba(255,68,68,.08);border:1px solid rgba(255,68,68,.2);color:var(--red)}
+.run-btn{width:100%;padding:11px;border:none;border-radius:9px;background:linear-gradient(135deg,var(--i),#7c73ff);color:white;font-family:'Outfit',sans-serif;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;transition:all .2s;margin-top:8px;box-shadow:0 4px 16px rgba(108,99,255,.4);position:relative;overflow:hidden}
+.run-btn::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,transparent,rgba(255,255,255,.15));opacity:0;transition:opacity .3s}
+.run-btn:hover{transform:translateY(-2px) scale(1.02);box-shadow:0 8px 28px rgba(108,99,255,.6)}
+.run-btn:hover::before{opacity:1}
+.run-btn:disabled{opacity:.4;pointer-events:none;transform:none}
+.spin{width:12px;height:12px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .65s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.client-search-wrap{padding:10px 14px;border-bottom:1px solid var(--br);flex-shrink:0}
+.client-search{width:100%;background:var(--s3);border:1px solid var(--br);border-radius:6px;color:var(--t1);font-size:12px;padding:7px 10px;outline:none;font-family:'Outfit',sans-serif;transition:border-color .2s,box-shadow .2s}
+.client-search:focus{border-color:var(--i);box-shadow:0 0 0 3px rgba(108,99,255,.1)}
+.client-list{display:flex;flex-direction:column}
+.client-item{padding:10px 14px;border-bottom:1px solid var(--br);cursor:pointer;transition:all .15s;position:relative}
+.client-item::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--i);opacity:0;transition:opacity .2s}
+.client-item:hover{background:var(--s3);transform:translateX(4px)}
+.client-item:hover::before{opacity:1}
+.ci-name{font-size:13px;font-weight:600;margin-bottom:2px}
+.ci-meta{font-size:10px;color:var(--t3);font-family:'JetBrains Mono',monospace}
+.ci-cost{font-size:10px;color:var(--aws);font-family:'JetBrains Mono',monospace;margin-top:2px}
+.content{display:flex;flex-direction:column;background:transparent;overflow-y:auto;position:relative;z-index:1;height:100%}
+.welcome-state{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:14px;padding:40px;text-align:center}
+.welcome-icon{font-size:52px;opacity:.2;margin-bottom:8px;color:var(--i);animation:float 3s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.welcome-title{font-size:18px;font-weight:700;background:linear-gradient(135deg,var(--i2),var(--tl));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.welcome-sub{font-size:13px;line-height:1.7;max-width:400px;color:var(--t3)}
+.ws-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:440px;width:100%}
+.ws-card{background:linear-gradient(135deg,var(--s2),var(--s3));border:1px solid var(--br);border-radius:9px;padding:11px 13px;text-align:left;transition:transform .2s,box-shadow .2s;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.ws-card:hover{transform:translateY(-4px) scale(1.02);box-shadow:0 8px 24px rgba(108,99,255,.2)}
+.ws-n{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--i);margin-bottom:3px}
+.ws-t{font-size:12px;font-weight:600;margin-bottom:2px}.ws-d{font-size:11px;color:var(--t3)}
+.prog-area{padding:14px;border-bottom:1px solid var(--br);display:none;flex-shrink:0}
+.calc-wrap{background:linear-gradient(135deg,var(--s2),var(--s3));border:1px solid var(--br);border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.3)}
+.calc-disp{background:linear-gradient(135deg,var(--s1),rgba(12,16,32,.8));padding:11px 15px;border-bottom:1px solid var(--br);display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
+.calc-lbl{font-size:9px;color:var(--t4);font-family:'JetBrains Mono',monospace;letter-spacing:2px;text-transform:uppercase;margin-bottom:2px}
+.calc-expr{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;color:var(--t1);min-height:16px;word-break:break-all}
+.calc-pct{font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:700;background:linear-gradient(135deg,var(--i),var(--tl));-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-align:right;line-height:1}
+.calc-pct-l{font-size:9px;color:var(--t3);text-align:right;font-family:'JetBrains Mono',monospace}
+.calc-track-a{padding:8px 15px 0}
+.calc-track-h{display:flex;justify-content:space-between;margin-bottom:3px}
+.ctl{font-size:10px;color:var(--t3);font-family:'JetBrains Mono',monospace}
+.calc-track{height:5px;background:var(--br);border-radius:3px;overflow:hidden}
+.calc-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--i),var(--tl));width:0%;transition:width .35s cubic-bezier(.4,0,.2,1);box-shadow:0 0 12px rgba(108,99,255,.6)}
+.calc-steps{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--br);margin-top:8px}
+.cstep{padding:6px 10px;border-right:1px solid var(--br);display:flex;align-items:center;gap:6px;transition:background .2s}
+.cstep:hover{background:rgba(108,99,255,.05)}
+.cstep:last-child{border-right:none}
+.csi{font-size:12px;flex-shrink:0;color:var(--t4);transition:color .3s,transform .3s}
+.cstep.active .csi{color:var(--i);animation:bounce .5s ease-in-out infinite alternate;transform:scale(1.1)}
+.cstep.done .csi{color:var(--grn)}
+@keyframes bounce{from{transform:translateY(0) scale(1.1)}to{transform:translateY(-3px) scale(1.1)}}
+.cs-lbl{font-size:9px;color:var(--t4);text-transform:uppercase;letter-spacing:.8px;font-family:'JetBrains Mono',monospace}
+.cs-val{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;color:var(--t3);transition:color .3s}
+.cstep.done .cs-val{color:var(--grn)}.cstep.active .cs-val{color:var(--i)}
+.calc-log{padding:5px 15px 8px;max-height:75px;overflow-y:auto}
+.log-row{display:flex;align-items:center;gap:5px;padding:2px 0;border-bottom:1px solid rgba(30,40,64,.4);font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--t2);animation:logAppear .3s ease-out}
+@keyframes logAppear{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}
+.log-row:last-child{border-bottom:none}
+.log-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0;box-shadow:0 0 6px currentColor}
+.log-t{color:var(--t4);font-size:9px;min-width:44px}
+.dash-area{padding:13px;display:flex;flex-direction:column;gap:10px}
+
+/* DOWNLOAD PANEL - 3D CARD */
+.dl-panel{background:linear-gradient(135deg,var(--s2),var(--s3));border:1px solid rgba(0,229,160,.2);border-radius:11px;overflow:hidden;box-shadow:0 6px 20px rgba(0,0,0,.3),0 0 40px rgba(0,229,160,.1);transition:transform .3s,box-shadow .3s}
+.dl-panel:hover{transform:translateY(-4px);box-shadow:0 12px 36px rgba(0,0,0,.4),0 0 60px rgba(0,229,160,.2)}
+.dl-hdr{background:linear-gradient(135deg,rgba(0,229,160,.06),rgba(108,99,255,.06));border-bottom:1px solid var(--br);padding:11px 15px;display:flex;align-items:center;justify-content:space-between}
+.dl-hdr-left{display:flex;align-items:center;gap:9px}
+.dl-file-icon{width:34px;height:34px;border-radius:8px;background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.2);display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--grn);box-shadow:0 0 16px rgba(0,229,160,.3);transition:transform .2s}
+.dl-panel:hover .dl-file-icon{transform:scale(1.1) rotate(5deg)}
+.dl-filename{font-size:11px;font-weight:700;margin-bottom:1px}
+.dl-meta{font-size:10px;color:var(--t3);font-family:'JetBrains Mono',monospace}
+.dl-btns{display:flex;gap:7px;flex-wrap:wrap}
+.dl-btn{display:flex;align-items:center;gap:6px;padding:8px 14px;border:none;border-radius:7px;font-family:'Outfit',sans-serif;font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;text-decoration:none;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.dl-btn:hover{transform:translateY(-2px) scale(1.03)}
+.dl-btn-main{background:var(--grn);color:#051a12;box-shadow:0 4px 16px rgba(0,229,160,.4)}
+.dl-btn-main:hover{box-shadow:0 6px 24px rgba(0,229,160,.6)}
+.dl-btn-bulk{background:rgba(255,153,0,.15);border:1px solid rgba(255,153,0,.3)!important;color:var(--aws)}
+.dl-btn-bulk:hover{background:rgba(255,153,0,.25);box-shadow:0 4px 16px rgba(255,153,0,.3)}
+.dl-btn-rpt{background:rgba(255,107,157,.12);border:1px solid rgba(255,107,157,.25)!important;color:var(--pk)}
+.dl-btn-rpt:hover{background:rgba(255,107,157,.2);box-shadow:0 4px 16px rgba(255,107,157,.3)}
+.dl-body{padding:10px 15px;display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.dl-stat{background:var(--s3);border:1px solid var(--br);border-radius:7px;padding:7px 9px;transition:transform .2s,box-shadow .2s}
+.dl-stat:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(108,99,255,.2)}
+.dl-sv{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;margin-bottom:1px}
+.dl-sl{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:1px;font-family:'JetBrains Mono',monospace}
+.dl-cols{padding:0 15px 10px;display:flex;flex-wrap:wrap;gap:4px}
+.dct{font-size:10px;font-family:'JetBrains Mono',monospace;padding:2px 5px;border-radius:3px;border:1px solid var(--br2);color:var(--t3);background:var(--s3);transition:transform .15s,background .15s}
+.dct:hover{transform:scale(1.05);background:var(--s4)}
+.dct.new{border-color:rgba(0,229,160,.25);color:var(--grn);background:rgba(0,229,160,.06)}
+.dct.new:hover{background:rgba(0,229,160,.12)}
+.dl-footer{padding:6px 15px 9px;font-size:10px;color:var(--t4);font-family:'JetBrains Mono',monospace;border-top:1px solid var(--br);display:flex;gap:12px;flex-wrap:wrap}
+.cl-item{display:flex;align-items:center;gap:4px;color:var(--t2)}
+.cl-sw{width:11px;height:8px;border-radius:2px;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+.metrics-strip{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.mc{background:linear-gradient(135deg,var(--s2),var(--s3));border:1px solid var(--br);border-radius:9px;padding:10px 11px;transition:transform .2s,box-shadow .2s;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.mc:hover{transform:translateY(-3px) scale(1.02);box-shadow:0 6px 20px rgba(108,99,255,.2)}
+.mc-i{font-size:11px;margin-bottom:3px;opacity:.8;transition:opacity .2s}
+.mc:hover .mc-i{opacity:1}
+.mc-val{font-size:15px;font-weight:700;font-family:'JetBrains Mono',monospace;letter-spacing:-.5px;margin-bottom:1px}
+.mc-lbl{font-size:9px;color:var(--t3);letter-spacing:1.2px;text-transform:uppercase;font-family:'JetBrains Mono',monospace}
+.mc-sub{font-size:9px;color:var(--t3);margin-top:1px}
+.sum-band{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+.sb-c{border-radius:9px;padding:10px 12px;border:1px solid;transition:transform .2s,box-shadow .2s;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.sb-c:hover{transform:translateY(-3px);box-shadow:0 6px 20px rgba(0,0,0,.4)}
+.sb-aws{background:rgba(255,153,0,.05);border-color:rgba(255,153,0,.14)}
+.sb-aws:hover{box-shadow:0 6px 20px rgba(255,153,0,.3)}
+.sb-az{background:rgba(33,150,243,.05);border-color:rgba(33,150,243,.14)}
+.sb-az:hover{box-shadow:0 6px 20px rgba(33,150,243,.3)}
+.sb-save{background:rgba(0,229,160,.05);border-color:rgba(0,229,160,.14)}
+.sb-save:hover{box-shadow:0 6px 20px rgba(0,229,160,.3)}
+.sb-yl{background:rgba(255,179,71,.05);border-color:rgba(255,179,71,.14)}
+.sb-yl:hover{box-shadow:0 6px 20px rgba(255,179,71,.3)}
+.sb-lbl{font-size:9px;font-family:'JetBrains Mono',monospace;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:3px}
+.sb-val{font-size:15px;font-weight:700;font-family:'JetBrains Mono',monospace;letter-spacing:-.5px}
+.sb-note{font-size:10px;color:var(--t3);margin-top:2px}
+.dash3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.dash2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.totals-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.panel{background:linear-gradient(135deg,var(--s2),var(--s3));border:1px solid var(--br);border-radius:10px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.25);transition:transform .2s,box-shadow .2s}
+.panel:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.4),0 0 30px rgba(108,99,255,.15)}
+.p-hdr{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--br);background:rgba(16,21,40,.4)}
+.p-title{font-size:11px;font-weight:600;display:flex;align-items:center;gap:5px}
+.p-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;box-shadow:0 0 8px currentColor}
+.p-body{padding:10px 12px}
+.donut-wrap{display:flex;align-items:center;gap:9px}
+.donut-c{position:relative;width:88px;height:88px;flex-shrink:0}
+.dleg{flex:1;display:flex;flex-direction:column;gap:3px}
+.dl-row{display:flex;align-items:center;justify-content:space-between;font-size:10px}
+.dl-l{display:flex;align-items:center;gap:4px;color:var(--t2)}
+.dl-sq{width:7px;height:7px;border-radius:2px;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+.dl-v{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--t1)}
+.fam-section{display:flex;flex-direction:column;gap:8px}
+.wf-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.wf-card{border-radius:7px;padding:8px 10px;border:1px solid;position:relative;overflow:hidden;transition:transform .2s,box-shadow .2s}
+.wf-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.wf-card:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.3)}
+.wf-compute{background:rgba(79,195,247,.05);border-color:rgba(79,195,247,.18)}.wf-compute::before{background:var(--sky)}
+.wf-compute:hover{box-shadow:0 6px 18px rgba(79,195,247,.3)}
+.wf-general{background:rgba(108,99,255,.05);border-color:rgba(108,99,255,.18)}.wf-general::before{background:var(--i)}
+.wf-general:hover{box-shadow:0 6px 18px rgba(108,99,255,.3)}
+.wf-memory{background:rgba(255,107,157,.05);border-color:rgba(255,107,157,.18)}.wf-memory::before{background:var(--pk)}
+.wf-memory:hover{box-shadow:0 6px 18px rgba(255,107,157,.3)}
+.wf-tag{font-size:9px;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:3px;font-weight:600}
+.wf-val{font-size:19px;font-weight:700;font-family:'JetBrains Mono',monospace;letter-spacing:-.5px;margin-bottom:1px}
+.wf-sub{font-size:9px;color:var(--t3);font-family:'JetBrains Mono',monospace}
+.wf-rule{font-size:9px;color:var(--t4);font-family:'JetBrains Mono',monospace;margin-top:2px}
+.inst-type-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}
+.it-card{background:var(--s3);border:1px solid var(--br);border-radius:6px;padding:6px 7px;text-align:center;transition:transform .2s,background .2s}
+.it-card:hover{transform:translateY(-2px) scale(1.03);background:var(--s4)}
+.it-prefix{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;margin-bottom:1px}
+.it-cnt{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600}
+.it-pct{font-size:9px;color:var(--t3);font-family:'JetBrains Mono',monospace}
+.it-bar{height:3px;border-radius:2px;margin-top:3px}
+.tot-card{background:var(--s3);border:1px solid var(--br);border-radius:8px;padding:8px 10px;transition:transform .2s}
+.tot-card:hover{transform:translateY(-2px)}
+.tc-hdr{font-size:9px;color:var(--t4);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px}
+.tc-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px}
+.tc-k{font-size:10px;color:var(--t3)}.tc-v{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600}
+.sep{height:1px;background:var(--br);margin:3px 0}
+.dp{font-size:9px;font-family:'JetBrains Mono',monospace;padding:1px 5px;border-radius:3px;font-weight:600;display:inline-block;margin-top:2px}
+.dp-up{background:rgba(255,68,68,.1);color:var(--red);border:1px solid rgba(255,68,68,.18)}
+.dp-dn{background:rgba(0,229,160,.12);color:var(--grn);border:1px solid rgba(0,229,160,.2)}
+.rdiff{display:flex;flex-direction:column;gap:5px}
+.rd-row{display:flex;align-items:center;gap:7px}
+.rd-lbl{font-size:10px;color:var(--t2);min-width:80px;flex-shrink:0}
+.rd-bar{flex:1;height:4px;background:var(--br);border-radius:2px;overflow:hidden}
+.rd-fill{height:100%;border-radius:2px;box-shadow:0 0 8px currentColor}
+.rd-num{font-family:'JetBrains Mono',monospace;font-size:10px;min-width:60px;text-align:right;flex-shrink:0}
+.grp-list{display:flex;flex-direction:column;gap:4px}
+.grp-row{display:flex;align-items:center;gap:6px;transition:transform .15s}
+.grp-row:hover{transform:translateX(4px)}
+.grp-name{font-size:10px;color:var(--t2);min-width:130px;flex-shrink:0}
+.grp-bar{flex:1;height:4px;background:var(--br);border-radius:2px;overflow:hidden}
+.grp-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--i),var(--tl));box-shadow:0 0 8px rgba(108,99,255,.5)}
+.grp-cnt{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t1);min-width:18px;text-align:right;flex-shrink:0}
+.grp-cost{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--am);min-width:60px;text-align:right;flex-shrink:0}
+
+/* HISTORY PANEL - 3D CARDS */
+.history-panel{background:linear-gradient(135deg,var(--s2),var(--s3));border:1px solid var(--br);border-radius:10px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.3)}
+.hist-hdr{padding:10px 14px;border-bottom:1px solid var(--br);background:rgba(16,21,40,.4)}
+.hist-title{font-size:13px;font-weight:700}
+.hist-sub{font-size:10px;color:var(--t3);font-family:'JetBrains Mono',monospace;margin-top:1px}
+.run-list{display:flex;flex-direction:column}
+.run-item{padding:10px 14px;border-bottom:1px solid var(--br);display:flex;align-items:center;justify-content:space-between;gap:9px;transition:all .2s;position:relative}
+.run-item::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,var(--i),var(--tl));opacity:0;transition:opacity .2s}
+.run-item:last-child{border-bottom:none}
+.run-item:hover{background:var(--s3);transform:translateX(4px)}
+.run-item:hover::before{opacity:1}
+.run-left{display:flex;flex-direction:column;gap:2px;flex:1}
+.run-filename{font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--t1)}
+.run-meta{font-size:10px;color:var(--t3);font-family:'JetBrains Mono',monospace}
+.run-cost-right{text-align:right;flex-shrink:0}
+.run-aws{font-size:12px;font-weight:700;color:var(--aws);font-family:'JetBrains Mono',monospace}
+.run-az{font-size:10px;color:var(--azure);font-family:'JetBrains Mono',monospace}
+.run-dl-btns{display:flex;gap:5px;flex-shrink:0}
+.run-dl-btn{padding:5px 9px;border-radius:6px;font-size:10px;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .2s;text-decoration:none;display:flex;align-items:center;gap:4px;white-space:nowrap;border:1px solid}
+.btn-xlsx{background:rgba(0,229,160,.08);border-color:rgba(0,229,160,.2);color:var(--grn)}
+.btn-xlsx:hover{background:rgba(0,229,160,.16);transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,229,160,.3)}
+.btn-bulk{background:rgba(255,153,0,.07);border-color:rgba(255,153,0,.2);color:var(--aws)}
+.btn-bulk:hover{background:rgba(255,153,0,.14);transform:translateY(-2px);box-shadow:0 4px 12px rgba(255,153,0,.3)}
+.btn-rpt{background:rgba(255,107,157,.07);border-color:rgba(255,107,157,.2);color:var(--pk)}
+.btn-rpt:hover{background:rgba(255,107,157,.14);transform:translateY(-2px);box-shadow:0 4px 12px rgba(255,107,157,.3)}
+.run-del-btn{padding:5px 7px;border-radius:6px;background:rgba(255,68,68,.07);border:1px solid rgba(255,68,68,.18);color:var(--red);font-size:10px;cursor:pointer;transition:all .2s}
+.run-del-btn:hover{background:rgba(255,68,68,.2);transform:scale(1.05);box-shadow:0 4px 12px rgba(255,68,68,.4)}
+.pricing-badge{padding:2px 7px;border-radius:4px;font-size:9px;font-family:'JetBrains Mono',monospace;background:rgba(108,99,255,.1);border:1px solid rgba(108,99,255,.2);color:var(--i2);white-space:nowrap}
+.hidden{display:none!important}
+::-webkit-scrollbar{width:3px;height:3px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--br2);border-radius:2px}
+</style>
+</head>
+<body>
+<!-- BACKGROUND EFFECTS -->
+<div class="bg-effects" id="bgEffects"></div>
+
+<div class="top-bar"></div>
+<header class="hdr">
+  <div style="display:flex;align-items:center;gap:10px">
+    <div class="logo-box">CI</div>
+    <div><div class="hdr-title">Cloud Instance Optimizer</div><div class="hdr-sub">AWS EC2 · Azure VM · Cheapest-first matching · Real-time</div></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <div class="conn-badge">
+      <div class="sonar"><div class="s-dot"></div><div class="s-ring"></div><div class="s-ring"></div><div class="s-ring"></div></div>
+      <div><div class="conn-lbl">Live</div><div class="conn-lat">localhost:5000</div></div>
+    </div>
+    <button onclick="resetToWelcome()" title="Start a new run" style="padding:5px 13px;background:rgba(108,99,255,.1);border:1px solid rgba(108,99,255,.25);border-radius:7px;color:var(--i2);font-family:Outfit,sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:.15s" onmouseover="this.style.background='rgba(108,99,255,.2)'" onmouseout="this.style.background='rgba(108,99,255,.1)'"><i class="fa-solid fa-house" style="font-size:10px;margin-right:5px"></i>New Run</button>
+    <span class="pill pill-aws">AWS EC2</span><span class="pill pill-az">Azure VM</span>
+  </div>
+</header>
+
+<div class="app-body">
+<aside class="sidebar">
+  <div class="particles" id="ptcls"></div>
+  <div class="sb-inner">
+    <div class="sb-tabs">
+      <div class="sb-tab active" onclick="showTab('config',this)"><i class="fa-solid fa-gear" style="font-size:10px;margin-right:4px"></i>Configure</div>
+      <div class="sb-tab" onclick="showTab('clients',this)" id="clientsTabBtn"><i class="fa-solid fa-users" style="font-size:10px;margin-right:4px"></i>Clients<span class="tab-badge" id="clientsBadge">0</span></div>
+    </div>
+
+    <!-- CONFIG PANE -->
+    <div class="sb-pane active" id="pane-config">
+      <!-- Client -->
+      <div class="sb-sec">
+        <div class="sec-hdr"><div class="sec-ico" style="background:rgba(255,107,157,.1);color:var(--pk)"><i class="fa-solid fa-building" style="font-size:10px"></i></div><span class="sec-lbl">Client</span></div>
+        <div class="fg" style="margin-bottom:0">
+          <label class="fl">Client Name *</label>
+          <div class="fi-wrap"><input class="fi" id="clientName" placeholder="e.g. Encova Insurance" autocomplete="off"/><i class="fa-solid fa-building fi-ico"></i></div>
+        </div>
+      </div>
+      <!-- MongoDB -->
+      <div class="sb-sec">
+        <div class="sec-hdr"><div class="sec-ico" style="background:rgba(0,229,195,.1);color:var(--tl)"><i class="fa-solid fa-database" style="font-size:10px"></i></div><span class="sec-lbl">MongoDB</span></div>
+        <div class="fg"><label class="fl">URI</label><div class="fi-wrap"><input class="fi" id="mongoUri" value="mongodb://localhost:27017/"/><i class="fa-solid fa-link fi-ico"></i></div></div>
+        <div class="fi-row">
+          <div class="fg"><label class="fl">AWS DB</label><div class="fi-wrap"><input class="fi" id="awsDb" value="EC2"/><i class="fa-solid fa-folder fi-ico"></i></div></div>
+          <div class="fg"><label class="fl">Azure DB</label><div class="fi-wrap"><input class="fi" id="azureDb" value="Azure"/><i class="fa-solid fa-folder fi-ico"></i></div></div>
+        </div>
+        <div class="fg" style="margin-bottom:0"><label class="fl">Azure Collection</label><div class="fi-wrap"><input class="fi" id="azColl" value="virtual_machines"/><i class="fa-solid fa-table fi-ico"></i></div></div>
+      </div>
+      <!-- Region -->
+      <div class="sb-sec">
+        <div class="sec-hdr"><div class="sec-ico" style="background:rgba(255,153,0,.1);color:var(--aws)"><i class="fa-solid fa-globe" style="font-size:10px"></i></div><span class="sec-lbl">AWS Region</span></div>
+        <div class="fg">
+          <label class="fl">Select regions</label>
+          <div class="rgn-wrap" id="rWrap">
+            <div class="rgn-trig" id="rTrig" onclick="tRgn()"><div class="rtags" id="rTags"><span style="color:var(--t4);font-size:11px">Choose regions...</span></div><span class="rgn-chev" id="rChev">&#9662;</span></div>
+            <div class="rgn-dd" id="rDD">
+              <div class="rgn-search"><input type="text" placeholder="Search..." oninput="fRgn(this.value)" id="rSearch"/></div>
+              <div class="rgn-list" id="rList"></div>
+              <div class="rgn-foot"><span class="rf-cnt" id="rfCnt">0 selected</span><span class="rf-clr" onclick="clrRgn()">Clear all</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="fg" style="margin-bottom:0"><label class="fl">Primary collection (query target)</label><div class="fi-wrap"><select class="fs" id="coll"><option value="us-east-1">us-east-1 (N. Virginia)</option><option value="ap-south-1">ap-south-1 (Mumbai)</option><option value="eu-central-1">eu-central-1 (Frankfurt)</option></select><i class="fa-solid fa-server fi-ico"></i></div></div>
+      </div>
+      <!-- Calculation Mode -->
+      <div class="sb-sec">
+        <div class="sec-hdr"><div class="sec-ico" style="background:rgba(0,229,195,.1);color:var(--tl)"><i class="fa-solid fa-diagram-project" style="font-size:10px"></i></div><span class="sec-lbl">Calculation Mode</span></div>
+        <div class="fg" style="margin-bottom:0">
+          <label class="fl">Instance Sizing</label>
+          <div class="fi-wrap">
+            <select class="fs" id="calcMode" onchange="updateCalcModePreview()">
+              <option value="like_to_like">Like-to-Like (exact vCPU/Memory match)</option>
+              <option value="optimized_n1">Optimized — N-1 (one size down)</option>
+              <option value="optimized_n2">Optimized — N-2 (two sizes down)</option>
+            </select>
+            <i class="fa-solid fa-microchip fi-ico"></i>
+          </div>
+        </div>
+        <div id="calcModePreview" style="font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--i2);padding:4px 0 0;opacity:.8">→ Cheapest instance ≥ source vCPU &amp; Memory</div>
+      </div>
+      <!-- Pricing Options -->
+      <div class="sb-sec">
+        <div class="sec-hdr"><div class="sec-ico" style="background:rgba(255,153,0,.1);color:var(--aws)"><i class="fa-solid fa-tag" style="font-size:10px"></i></div><span class="sec-lbl">Pricing Option</span></div>
+        <div class="fi-row">
+          <div class="fg">
+            <label class="fl">Lease Term</label>
+            <div class="fi-wrap">
+              <select class="fs" id="leaseTerm" onchange="updatePricingKey()">
+                <option value="3yr">3 Year</option>
+                <option value="1yr">1 Year</option>
+                <option value="on_demand">On-Demand</option>
+              </select>
+              <i class="fa-solid fa-calendar fi-ico"></i>
+            </div>
+          </div>
+          <div class="fg">
+            <label class="fl">Purchase Option</label>
+            <div class="fi-wrap">
+              <select class="fs" id="purchaseOption" onchange="updatePricingKey()">
+                <option value="partial_upfront">Partial Upfront</option>
+                <option value="no_upfront">No Upfront</option>
+                <option value="all_upfront">All Upfront</option>
+              </select>
+              <i class="fa-solid fa-credit-card fi-ico"></i>
+            </div>
+          </div>
+        </div>
+        <div id="pricingPreview" style="font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--i2);padding:4px 0 0;opacity:.8"></div>
+      </div>
+      <!-- File Upload -->
+
+      <div class="sb-sec">
+        <div class="sec-hdr"><div class="sec-ico" style="background:rgba(255,107,157,.1);color:var(--pk)"><i class="fa-solid fa-file-excel" style="font-size:10px"></i></div><span class="sec-lbl">Input File</span></div>
+        <div class="drop-z" id="dropZ">
+          <input type="file" id="fileInp" accept=".xlsx,.xls" onchange="uploadFile(this)"/>
+          <div class="drop-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+          <div class="drop-main">Drop Excel or click to browse</div>
+          <div class="drop-sub">vCPU · Memory · OS · Tenancy · License · S/W</div>
+        </div>
+        <div class="file-status" id="fileStatus"></div>
+        <button id="changeFileBtn" onclick="changeFile()" style="display:none;width:100%;margin-top:5px;padding:6px;background:rgba(108,99,255,.1);border:1px solid rgba(108,99,255,.25);border-radius:6px;color:var(--i2);font-family:Outfit,sans-serif;font-size:11px;cursor:pointer;transition:.15s" onmouseover="this.style.background='rgba(108,99,255,.2)'" onmouseout="this.style.background='rgba(108,99,255,.1)'"><i class="fa-solid fa-arrows-rotate" style="margin-right:4px;font-size:10px"></i>Change File</button>
+      </div>
+      <!-- Run -->
+      <div class="sb-sec">
+        <button class="run-btn" id="runBtn" onclick="startRun()">
+          <span id="runTxt"><i class="fa-solid fa-play" style="font-size:11px;margin-right:5px"></i>Run Optimizer</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- CLIENTS PANE -->
+    <div class="sb-pane" id="pane-clients">
+      <div class="client-search-wrap"><input class="client-search" placeholder="Search clients..." oninput="filterClients(this.value)"/></div>
+      <div class="client-list" id="clientList"></div>
+    </div>
+  </div>
+</aside>
+
+<main class="content" id="mainContent">
+  <!-- Welcome -->
+  <div class="welcome-state" id="welcomeState">
+    <div class="welcome-icon"><i class="fa-solid fa-cloud"></i></div>
+    <div class="welcome-title">Cloud Instance Optimizer</div>
+    <div class="welcome-sub">Find the cheapest AWS EC2 + Azure VM instances. Outputs: color-coded XLSX, AWS Pricing Calculator bulk import, and a downloadable HTML dashboard report — all saved per client.</div>
+    <div class="ws-grid">
+      <div class="ws-card"><div class="ws-n">01</div><div class="ws-t">Enter Client Name</div><div class="ws-d">Track all runs per client</div></div>
+      <div class="ws-card"><div class="ws-n">02</div><div class="ws-t">Select Pricing Plan</div><div class="ws-d">1yr/3yr · No/Partial/All Upfront</div></div>
+      <div class="ws-card"><div class="ws-n">03</div><div class="ws-t">Upload Excel Input</div><div class="ws-d">RVTools export with VM details</div></div>
+      <div class="ws-card"><div class="ws-n">04</div><div class="ws-t">Download 3 Outputs</div><div class="ws-d">XLSX + Bulk Import + HTML Report</div></div>
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div class="prog-area" id="progArea">
+    <div class="calc-wrap">
+      <div class="calc-disp">
+        <div><div class="calc-lbl">Pipeline Expression</div><div class="calc-expr" id="calcExpr">Initializing...</div></div>
+        <div><div class="calc-pct" id="calcPct">0%</div><div class="calc-pct-l">complete</div></div>
+      </div>
+      <div class="calc-track-a">
+        <div class="calc-track-h"><span class="ctl" id="calcStep">Preparing</span></div>
+        <div class="calc-track"><div class="calc-fill" id="calcFill"></div></div>
+      </div>
+      <div class="calc-steps">
+        <div class="cstep" id="cst0"><div class="csi"><i class="fa-solid fa-plug"></i></div><div><div class="cs-lbl">Connect</div><div class="cs-val" id="cv0">—</div></div></div>
+        <div class="cstep" id="cst1"><div class="csi"><i class="fa-solid fa-magnifying-glass"></i></div><div><div class="cs-lbl">AWS Query</div><div class="cs-val" id="cv1">—</div></div></div>
+        <div class="cstep" id="cst2"><div class="csi"><i class="fa-solid fa-cloud"></i></div><div><div class="cs-lbl">Azure Query</div><div class="cs-val" id="cv2">—</div></div></div>
+        <div class="cstep" id="cst3"><div class="csi"><i class="fa-solid fa-file-arrow-down"></i></div><div><div class="cs-lbl">Output</div><div class="cs-val" id="cv3">—</div></div></div>
+      </div>
+      <div class="calc-log" id="calcLog"></div>
+    </div>
+  </div>
+
+  <!-- Dashboard -->
+  <div class="dash-area hidden" id="dashArea">
+
+    <!-- Download panel — 3 buttons -->
+    <div class="dl-panel" id="dlPanel">
+      <div class="dl-hdr">
+        <div class="dl-hdr-left">
+          <div class="dl-file-icon"><i class="fa-solid fa-file-excel"></i></div>
+          <div><div class="dl-filename" id="dlFilename">output.xlsx</div><div class="dl-meta" id="dlMeta">Ready</div></div>
+        </div>
+        <div class="dl-btns">
+          <a class="dl-btn dl-btn-main" id="dlBtnXlsx" href="#" download><i class="fa-solid fa-download" style="font-size:11px"></i>Download XLSX</a>
+          <a class="dl-btn dl-btn-bulk" id="dlBtnBulk" href="#" download><i class="fa-solid fa-file-import" style="font-size:11px"></i>Bulk Import</a>
+          <a class="dl-btn dl-btn-rpt" id="dlBtnRpt" href="#" download><i class="fa-solid fa-chart-bar" style="font-size:11px"></i>HTML Report</a>
+        </div>
+      </div>
+      <div class="dl-body">
+        <div class="dl-stat"><div class="dl-sv" style="color:var(--i)" id="dlRows">—</div><div class="dl-sl">Total Rows</div></div>
+        <div class="dl-stat"><div class="dl-sv" style="color:var(--aws)" id="dlAwsPm">—</div><div class="dl-sl">AWS $/mo</div></div>
+        <div class="dl-stat"><div class="dl-sv" style="color:var(--azure)" id="dlAzPm">—</div><div class="dl-sl">Azure $/mo</div></div>
+        <div class="dl-stat"><div class="dl-sv" style="color:var(--am)" id="dlUpsized">—</div><div class="dl-sl">Upsized VMs</div></div>
+      </div>
+      <div class="dl-cols">
+        <span class="dct">vCPU</span><span class="dct">Memory</span><span class="dct">Operating System</span><span class="dct">Production Servers</span><span class="dct">Tenancy</span><span class="dct">License Model</span><span class="dct">Pre Installed S/W</span><span class="dct">VM</span><span class="dct">Group</span>
+        <span class="dct new">AWS Recommended vCPU</span><span class="dct new">AWS Recommended Memory</span><span class="dct new">AWS Recommended Instance Type</span><span class="dct new">Instance Family</span><span class="dct new">Downsized</span><span class="dct new">Upsized</span><span class="dct new">PricePerHour</span><span class="dct new">PricePerMonth</span><span class="dct new">PricePerYear</span><span class="dct new">Azure Instance Type</span><span class="dct new">Azure Pay as you go per hour</span><span class="dct new">Azure 1 yr Savings per hour</span><span class="dct new">Azure 3 yr Savings per hour</span>
+      </div>
+      <div class="dl-footer">
+        <span class="cl-item"><span class="cl-sw" style="background:#C6EFCE"></span>Green = Downsized (memory reduced)</span>
+        <span class="cl-item"><span class="cl-sw" style="background:#FFE0B2"></span>Orange = Upsized (no smaller instance)</span>
+        <span class="cl-item"><span class="cl-sw" style="background:rgba(255,255,255,.1);border:1px solid var(--br)"></span>White = Exact match</span>
+      </div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="metrics-strip">
+      <div class="mc"><div class="mc-i" style="color:var(--i)"><i class="fa-solid fa-server"></i></div><div class="mc-val" style="color:var(--i)" id="mv1">—</div><div class="mc-lbl">Total VMs</div><div class="mc-sub" id="ms1"></div></div>
+      <div class="mc"><div class="mc-i" style="color:var(--grn)"><i class="fa-solid fa-shield-check"></i></div><div class="mc-val" style="color:var(--grn)" id="mv2">—</div><div class="mc-lbl">Production</div><div class="mc-sub" id="ms2"></div></div>
+      <div class="mc"><div class="mc-i" style="color:var(--azure)"><i class="fa-solid fa-database"></i></div><div class="mc-val" style="color:var(--azure)" id="mv3">—</div><div class="mc-lbl">SQL Servers</div><div class="mc-sub" id="ms3"></div></div>
+      <div class="mc"><div class="mc-i" style="color:var(--aws)"><i class="fa-brands fa-aws"></i></div><div class="mc-val" style="color:var(--aws)" id="mv4">—</div><div class="mc-lbl">AWS $/mo</div><div class="mc-sub" id="ms4"></div></div>
+      <div class="mc"><div class="mc-i" style="color:var(--azure)"><i class="fa-solid fa-cloud"></i></div><div class="mc-val" style="color:var(--azure)" id="mv5">—</div><div class="mc-lbl">Azure $/mo</div><div class="mc-sub">3yr savings</div></div>
+      <div class="mc"><div class="mc-i" style="color:var(--grn)"><i class="fa-solid fa-piggy-bank"></i></div><div class="mc-val" style="color:var(--grn)" id="mv6">—</div><div class="mc-lbl">Saves/mo</div><div class="mc-sub">Azure vs AWS</div></div>
+    </div>
+
+    <!-- Summary band -->
+    <div class="sum-band">
+      <div class="sb-c sb-aws"><div class="sb-lbl" style="color:var(--aws)">AWS Total $/yr</div><div class="sb-val" style="color:var(--aws)" id="sbAws">—</div><div class="sb-note" id="sbAwsN"></div></div>
+      <div class="sb-c sb-az"><div class="sb-lbl" style="color:var(--azure)">Azure Total $/yr</div><div class="sb-val" style="color:var(--azure)" id="sbAz">—</div><div class="sb-note">3yr savings plan</div></div>
+      <div class="sb-c sb-save"><div class="sb-lbl" style="color:var(--grn)">Azure saves/yr</div><div class="sb-val" style="color:var(--grn)" id="sbSave">—</div><div class="sb-note" id="sbSaveN"></div></div>
+      <div class="sb-c sb-yl"><div class="sb-lbl" style="color:var(--am)">Upsized VMs</div><div class="sb-val" style="color:var(--am)" id="sbUp">—</div><div class="sb-note">vCPU or mem rounded up</div></div>
+    </div>
+
+    <!-- Fleet totals -->
+    <div class="totals-grid">
+      <div class="tot-card"><div class="tc-hdr">vCPU — Source vs Target</div><div class="tc-row"><span class="tc-k">Source</span><span class="tc-v" style="color:var(--i)" id="tcSV">—</span></div><div class="sep"></div><div class="tc-row"><span class="tc-k">Target (AWS)</span><span class="tc-v" style="color:var(--tl)" id="tcTV">—</span></div><div id="vDiff"></div></div>
+      <div class="tot-card"><div class="tc-hdr">Memory — Source vs Target</div><div class="tc-row"><span class="tc-k">Source</span><span class="tc-v" style="color:var(--i)" id="tcSM">—</span></div><div class="sep"></div><div class="tc-row"><span class="tc-k">Target (AWS)</span><span class="tc-v" style="color:var(--tl)" id="tcTM">—</span></div><div id="mDiff"></div></div>
+    </div>
+
+    <!-- Donuts -->
+    <div class="dash3">
+      <div class="panel"><div class="p-hdr"><div class="p-title"><span class="p-dot" style="background:var(--grn)"></span>Production Split</div></div><div class="p-body"><div class="donut-wrap"><div class="donut-c"><canvas id="prodChart" role="img" aria-label="Prod donut"></canvas></div><div class="dleg" id="prodLeg"></div></div></div></div>
+      <div class="panel"><div class="p-hdr"><div class="p-title"><span class="p-dot" style="background:var(--azure)"></span>SQL Edition Mix</div></div><div class="p-body"><div class="donut-wrap"><div class="donut-c"><canvas id="sqlChart" role="img" aria-label="SQL donut"></canvas></div><div class="dleg" id="sqlLeg"></div></div></div></div>
+      <div class="panel"><div class="p-hdr"><div class="p-title"><span class="p-dot" style="background:var(--pk)"></span>OS Distribution</div></div><div class="p-body"><div class="donut-wrap"><div class="donut-c"><canvas id="osChart" role="img" aria-label="OS donut"></canvas></div><div class="dleg" id="osLeg"></div></div></div></div>
+    </div>
+
+    <!-- Family Classification -->
+    <div class="panel">
+      <div class="p-hdr"><div class="p-title"><span class="p-dot" style="background:var(--am)"></span>Instance Family Classification</div></div>
+      <div class="p-body">
+        <div class="fam-section">
+          <div><div style="font-size:9px;color:var(--t3);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:5px">Workload family — Memory/vCPU ratio from input file</div>
+          <div class="wf-grid">
+            <div class="wf-card wf-compute"><div class="wf-tag" style="color:var(--sky)"><i class="fa-solid fa-bolt" style="font-size:8px;margin-right:3px"></i>Compute</div><div class="wf-val" style="color:var(--sky)" id="wfC">—</div><div class="wf-sub" id="wfCp">—</div><div class="wf-rule">ratio <4 → c*</div></div>
+            <div class="wf-card wf-general"><div class="wf-tag" style="color:var(--i2)"><i class="fa-solid fa-equals" style="font-size:8px;margin-right:3px"></i>General</div><div class="wf-val" style="color:var(--i2)" id="wfG">—</div><div class="wf-sub" id="wfGp">—</div><div class="wf-rule">ratio 4–8 → m*</div></div>
+            <div class="wf-card wf-memory"><div class="wf-tag" style="color:var(--pk)"><i class="fa-solid fa-layer-group" style="font-size:8px;margin-right:3px"></i>Memory</div><div class="wf-val" style="color:var(--pk)" id="wfM">—</div><div class="wf-sub" id="wfMp">—</div><div class="wf-rule">ratio >8 → r*</div></div>
+          </div></div>
+          <div style="height:1px;background:var(--br)"></div>
+          <div><div style="font-size:9px;color:var(--t3);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:5px">AWS instance type prefixes — from recommended instances</div><div class="inst-type-grid" id="instTypeGrid"></div></div>
+          <div style="background:var(--s3);border:1px solid var(--br);border-radius:6px;padding:7px 10px"><div style="font-size:9px;color:var(--t3);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:5px">AWS Instance Family — from DB</div><div style="display:flex;gap:7px;flex-wrap:wrap" id="awsFamBreakdown"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resource diff + Group -->
+    <div class="dash2">
+      <div class="panel"><div class="p-hdr"><div class="p-title"><span class="p-dot" style="background:var(--am)"></span>Source vs Target Resources</div></div><div class="p-body"><div class="rdiff" id="rdiff"></div></div></div>
+      <div class="panel"><div class="p-hdr"><div class="p-title"><span class="p-dot" style="background:var(--tl)"></span>Group Breakdown</div></div><div class="p-body"><div class="grp-list" id="grpList"></div></div></div>
+    </div>
+
+    <!-- Cost charts -->
+    <div class="dash2">
+      <div class="panel"><div class="p-hdr"><div class="p-title"><span class="p-dot" style="background:var(--aws)"></span>AWS vs Azure — Monthly Cost</div></div><div class="p-body" style="padding-bottom:12px"><div style="position:relative;height:150px"><canvas id="costChart" role="img" aria-label="Cost chart"></canvas></div></div></div>
+      <div class="panel"><div class="p-hdr"><div class="p-title"><span class="p-dot" style="background:var(--yl)"></span>Instances by Family</div></div><div class="p-body" style="padding-bottom:12px"><div style="position:relative;height:150px"><canvas id="famCostChart" role="img" aria-label="Family chart"></canvas></div></div></div>
+    </div>
+
+    <!-- History -->
+    <div class="history-panel" id="historyPanel" style="display:none">
+      <div class="hist-hdr" style="display:flex;align-items:center;justify-content:space-between">
+        <div><div class="hist-title" id="histTitle">Run History</div><div class="hist-sub" id="histSub"></div></div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="run-dl-btn btn-xlsx" style="border:1px solid rgba(0,229,160,.2)" onclick="renameCurrentClient()"><i class="fa-solid fa-pen" style="font-size:10px"></i>Rename Client</button>
+          <button class="run-del-btn" style="padding:6px 10px;display:flex;align-items:center;gap:4px" onclick="deleteCurrentClient()"><i class="fa-solid fa-trash" style="font-size:10px"></i>Delete Client</button>
+        </div>
+      </div>
+      <div class="run-list" id="runList"></div>
+    </div>
+  </div>
+</main>
+</div>
+
+<script>
+const socket = io();
+const co = {responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(30,40,64,.6)'},ticks:{color:'#4f5a8a',font:{size:9}}},y:{grid:{color:'rgba(30,40,64,.6)'},ticks:{color:'#4f5a8a',font:{size:9}}}}};
+
+// REGIONS
+const RGNS={'US East':['us-east-1 (N. Virginia)','us-east-2 (Ohio)'],'US West':['us-west-1 (N. California)','us-west-2 (Oregon)'],'Canada':['ca-central-1 (Central)','ca-west-1 (Calgary)'],'Europe':['eu-west-1 (Ireland)','eu-west-2 (London)','eu-west-3 (Paris)','eu-central-1 (Frankfurt)','eu-north-1 (Stockholm)','eu-south-1 (Milan)'],'Asia Pacific':['ap-southeast-1 (Singapore)','ap-southeast-2 (Sydney)','ap-northeast-1 (Tokyo)','ap-northeast-2 (Seoul)','ap-south-1 (Mumbai)','ap-east-1 (Hong Kong)'],'Middle East':['me-south-1 (Bahrain)','me-central-1 (UAE)','af-south-1 (Cape Town)'],'South America':['sa-east-1 (Sao Paulo)']};
+const selR=new Set();
+function rk(r){return r.split(' ')[0]}
+function buildRL(f){const l=document.getElementById('rList');l.innerHTML='';Object.entries(RGNS).forEach(([g,items])=>{const fi=f?items.filter(i=>i.toLowerCase().includes(f.toLowerCase())):items;if(!fi.length)return;const gl=document.createElement('div');gl.className='rg-lbl';gl.textContent=g;l.appendChild(gl);fi.forEach(r=>{const k=rk(r);const d=document.createElement('div');d.className='ropt'+(selR.has(k)?' sel':'');d.innerHTML='<div class="rchk">'+(selR.has(k)?'&#10003;':'')+'</div><span>'+r+'</span>';d.onclick=()=>togR(k,d);l.appendChild(d);})});}
+function togR(k,el){selR.has(k)?(selR.delete(k),el.classList.remove('sel'),el.querySelector('.rchk').innerHTML=''):(selR.add(k),el.classList.add('sel'),el.querySelector('.rchk').innerHTML='&#10003;');rTags();document.getElementById('rfCnt').textContent=selR.size+' selected';}
+function rTags(){const c=document.getElementById('rTags');if(!selR.size){c.innerHTML='<span style="color:var(--t4);font-size:11px">Choose regions...</span>';return;}c.innerHTML=[...selR].map(k=>'<span class="rtag">'+k+'<span class="rtag-x" onclick="rmR(event,\''+k+'\')">&#215;</span></span>').join('');}
+function rmR(e,k){e.stopPropagation();selR.delete(k);rTags();buildRL(document.getElementById('rSearch').value);document.getElementById('rfCnt').textContent=selR.size+' selected';}
+function clrRgn(){selR.clear();rTags();buildRL('');document.getElementById('rfCnt').textContent='0 selected';}
+function fRgn(v){buildRL(v);}
+function tRgn(){const dd=document.getElementById('rDD'),tr=document.getElementById('rTrig'),ch=document.getElementById('rChev');const o=dd.classList.contains('show');dd.classList.toggle('show');tr.classList.toggle('open');ch.classList.toggle('open');if(!o)buildRL('');}
+document.addEventListener('click',e=>{if(!document.getElementById('rWrap').contains(e.target)){document.getElementById('rDD').classList.remove('show');document.getElementById('rTrig').classList.remove('open');document.getElementById('rChev').classList.remove('open');}});
+
+// ANIMATED BACKGROUND - Snow + Glow Orbs
+(function(){
+  const bg=document.getElementById('bgEffects');
+  // Snow particles - subtle, across the whole page
+  for(let i=0;i<16;i++){
+    const s=document.createElement('div');
+    s.className='snow';
+    const sz=Math.random()*2.5+1;
+    s.style.cssText=`width:${sz}px;height:${sz}px;left:${Math.random()*100}%;top:${Math.random()*-20}%;animation-duration:${10+Math.random()*12}s;animation-delay:${Math.random()*10}s;--drift:${(Math.random()-.5)*80}px;opacity:${.25+Math.random()*.25}`;
+    bg.appendChild(s);
+  }
+  // Glow orbs for 3D depth
+  const orbs=[{c:'#6c63ff',s:250,x:'10%',y:'20%'},{c:'#00e5c3',s:300,x:'80%',y:'60%'},{c:'#ff6b9d',s:200,x:'50%',y:'80%'}];
+  orbs.forEach(o=>{const orb=document.createElement('div');orb.className='glow-orb';orb.style.cssText=`width:${o.s}px;height:${o.s}px;background:${o.c};left:${o.x};top:${o.y}`;bg.appendChild(orb);});
+})();
+
+// SIDEBAR PARTICLES - Enhanced with colors
+(function(){const c=document.getElementById('ptcls');for(let i=0;i<20;i++){const p=document.createElement('div');p.className='ptcl';const sz=Math.random()*3+1;const cols=['rgba(108,99,255,.6)','rgba(0,229,195,.5)','rgba(255,107,157,.4)'];const col=cols[Math.floor(Math.random()*cols.length)];const dx=(Math.random()-.5)*70;p.style.cssText=`width:${sz}px;height:${sz}px;color:${col};background:${col};left:${Math.random()*100}%;bottom:${Math.random()*30}%;animation-duration:${6+Math.random()*10}s;animation-delay:${Math.random()*8}s;--dx:${dx}px`;c.appendChild(p);}})();
+
+// CALCULATION MODE
+function updateCalcModePreview() {
+  const mode = document.getElementById('calcMode').value;
+  const previews = {
+    'like_to_like': '→ Cheapest instance ≥ source vCPU &amp; Memory (no downsizing)',
+    'optimized_n1': '→ Downsizes once (vCPU÷2 if ≥8, Memory÷2 if ≥16), then cheapest match',
+    'optimized_n2': '→ Downsizes twice — more aggressive right-sizing, then cheapest match',
+  };
+  document.getElementById('calcModePreview').innerHTML = previews[mode] || '';
+}
+updateCalcModePreview();
+
+// PRICING DROPDOWNS
+let selectedPricing = '3yr_partial_upfront';
+function updatePricingKey() {
+  const term = document.getElementById('leaseTerm').value;
+  const pur  = document.getElementById('purchaseOption').value;
+  const purEl= document.getElementById('purchaseOption');
+  if (term === 'on_demand') {
+    selectedPricing = 'on_demand';
+    purEl.disabled = true;
+    purEl.style.opacity = '0.4';
+    document.getElementById('pricingPreview').textContent = '→ On-Demand (no commitment)';
+  } else {
+    purEl.disabled = false;
+    purEl.style.opacity = '1';
+    selectedPricing = term + '_' + pur;
+    const labels = {'no_upfront': 'No Upfront', 'partial_upfront': 'Partial Upfront', 'all_upfront': 'All Upfront'};
+    document.getElementById('pricingPreview').textContent = '→ ' + (term === '3yr' ? '3 Year' : '1 Year') + ' Reserved · ' + (labels[pur] || pur);
+  }
+}
+updatePricingKey();
+
+// TAB SWITCH
+// VIEW MODE TRACKING — fixes Configure tab not restoring after viewing client history
+let viewMode = 'welcome';      // 'welcome' | 'running' | 'own_result' | 'client_history'
+let ownResult = null;          // stores the current run's own dashboard data to restore later
+
+function showTab(name,el){
+  document.querySelectorAll('.sb-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.sb-pane').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('pane-'+name).classList.add('active');
+
+  if(name==='config' && viewMode==='client_history'){
+    // Coming back from Clients tab — restore whatever the Configure tab should show
+    if(ownResult){
+      viewMode='own_result';
+      document.getElementById('welcomeState').style.display='none';
+      document.getElementById('progArea').style.display='none';
+      document.getElementById('dashArea').classList.remove('hidden');
+      document.getElementById('dlPanel').style.display='';
+      renderDash(ownResult.summary, ownResult.clientId, ownResult.runId, ownResult.filename, ownResult.bulkFn, ownResult.reportFn);
+    } else {
+      resetToWelcome();
+    }
+  }
+}
+
+// FILE UPLOAD
+let uploadedFileId=null;
+async function uploadFile(inp){
+  const f=inp.files[0];if(!f)return;
+  const st=document.getElementById('fileStatus');
+  const dz=document.getElementById('dropZ');
+  st.className='file-status file-ok';st.style.display='block';st.textContent='Uploading...';
+  const fd=new FormData();fd.append('file',f);
+  try{
+    const res=await fetch('/api/upload',{method:'POST',body:fd});
+    const d=await res.json();
+    if(d.error){st.className='file-status file-err';st.textContent='Error: '+d.error;uploadedFileId=null;return;}
+    uploadedFileId=d.file_id;
+    st.textContent='OK  '+f.name+' - '+d.rows+' rows';
+    dz.style.borderColor='var(--grn)';
+    dz.classList.add('file-ok');
+    document.getElementById('changeFileBtn').style.display='block';
+  }catch(e){st.className='file-status file-err';st.textContent='Upload failed: '+e;uploadedFileId=null;}
+}
+
+function changeFile(){
+  uploadedFileId=null;
+  document.getElementById('fileStatus').style.display='none';
+  document.getElementById('dropZ').style.borderColor='';
+  document.getElementById('dropZ').classList.remove('file-ok');
+  document.getElementById('changeFileBtn').style.display='none';
+  const inp=document.getElementById('fileInp');inp.value='';inp.click();
+}
+
+// RUN
+function startRun(){
+  const cn=document.getElementById('clientName').value.trim();
+  if(!cn){alert('Please enter a client name.');document.getElementById('clientName').focus();return;}
+  if(!uploadedFileId){alert('Please upload an input Excel file first.');return;}
+  viewMode='running';
+  const btn=document.getElementById('runBtn'),txt=document.getElementById('runTxt');
+  btn.disabled=true;txt.innerHTML='<div class="spin"></div> Running...';
+  document.getElementById('welcomeState').style.display='none';
+  document.getElementById('progArea').style.display='block';
+  document.getElementById('dashArea').classList.add('hidden');
+  document.getElementById('calcLog').innerHTML='';
+  for(let i=0;i<4;i++){document.getElementById('cst'+i).classList.remove('active','done');document.getElementById('cv'+i).textContent='—';}
+  document.getElementById('calcFill').style.width='0%';
+  socket.emit('start_run',{
+    client_name:cn,file_id:uploadedFileId,
+    mongo_uri:document.getElementById('mongoUri').value,
+    aws_db:document.getElementById('awsDb').value,
+    aws_collection:document.getElementById('coll').value,
+    azure_db:document.getElementById('azureDb').value,
+    azure_collection:document.getElementById('azColl').value,
+    purchase_key:selectedPricing,
+    calc_mode:document.getElementById('calcMode').value,
+  });
+}
+
+// SOCKET
+const SMAP={'Connecting':0,'Connected':0,'Reading':1,'File':1,'Classifying':1,'AWS':1,'Row':1,'Azure':2,'Cost':3,'Writing':3,'Bulk':3,'HTML':3,'Summary':3,'Complete':3};
+socket.on('progress',d=>{
+  document.getElementById('calcFill').style.width=d.pct+'%';
+  document.getElementById('calcPct').textContent=Math.round(d.pct)+'%';
+  document.getElementById('calcExpr').textContent=d.expr;
+  document.getElementById('calcStep').textContent=d.step;
+  const si=Object.entries(SMAP).find(([k])=>d.step.includes(k));
+  const idx=si?si[1]:-1;
+  for(let i=0;i<4;i++){
+    const el=document.getElementById('cst'+i),cv=document.getElementById('cv'+i);
+    if(i<idx){el.classList.remove('active');el.classList.add('done');cv.textContent='Done';}
+    else if(i===idx){el.classList.add('active');el.classList.remove('done');cv.textContent='Running...';}
+    else if(d.pct>=100){el.classList.remove('active');el.classList.add('done');cv.textContent='Done';}
+    else{el.classList.remove('active','done');cv.textContent='—';}
+  }
+  const log=document.getElementById('calcLog');
+  const t=new Date().toLocaleTimeString('en',{hour12:false});
+  const row=document.createElement('div');row.className='log-row';
+  row.innerHTML='<span class="log-dot" style="background:'+(d.color||'var(--t2)')+'"></span><span class="log-t">'+t+'</span><span>'+d.log+'</span>';
+  log.appendChild(row);log.scrollTop=log.scrollHeight;
+});
+socket.on('run_error',d=>{document.getElementById('runBtn').disabled=false;document.getElementById('runTxt').innerHTML='<i class="fa-solid fa-triangle-exclamation" style="font-size:11px;margin-right:5px"></i>Error — Retry';alert('Error:\n'+d.message);});
+socket.on('run_complete',d=>{
+  document.getElementById('runBtn').disabled=false;
+  document.getElementById('runTxt').innerHTML='<i class="fa-solid fa-rotate" style="font-size:11px;margin-right:5px"></i>Run Again';
+  document.getElementById('dashArea').classList.remove('hidden');
+  document.getElementById('dlPanel').style.display='';
+  viewMode='own_result';
+  ownResult={summary:d.summary,clientId:d.client_id,runId:d.run_id,filename:d.filename,bulkFn:d.bulk_filename,reportFn:d.report_filename};
+  renderDash(d.summary,d.client_id,d.run_id,d.filename,d.bulk_filename,d.report_filename);
+  loadClients();
+});
+
+// HELPERS
+function fmt(v){if(v==null||v===undefined)return'—';if(v>=1e6)return'$'+(v/1e6).toFixed(2)+'M';if(v>=1000)return'$'+(v/1000).toFixed(1)+'K';return'$'+Math.round(v).toLocaleString();}
+function fmtG(v){if(v>=1000)return(v/1000).toFixed(1)+'T GiB';return Math.round(v).toLocaleString()+' GiB';}
+function donut(id,labels,data,colors,legId){
+  const el=document.getElementById(id);const ex=Chart.getChart(el);if(ex)ex.destroy();
+  new Chart(el,{type:'doughnut',data:{labels,datasets:[{data,backgroundColor:colors,borderColor:'#0c1020',borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,cutout:'65%',plugins:{legend:{display:false}}}});
+  const lg=document.getElementById(legId);lg.innerHTML='';
+  const tot=data.reduce((a,b)=>a+b,0);
+  labels.forEach((l,i)=>{if(!data[i])return;const pct=Math.round(data[i]/tot*100);lg.innerHTML+='<div class="dl-row"><div class="dl-l"><div class="dl-sq" style="background:'+colors[i]+'"></div>'+l+'</div><div class="dl-v">'+data[i]+'<span style="color:var(--t3);font-size:9px"> '+pct+'%</span></div></div>';});
+}
+
+// RENDER DASHBOARD
+function renderDash(s,clientId,runId,filename,bulkFn,reportFn){
+  const n=s.total_rows;
+  document.getElementById('dlFilename').textContent=filename;
+  const cmLabel={'like_to_like':'LIKE-TO-LIKE','optimized_n1':'OPTIMIZED N-1','optimized_n2':'OPTIMIZED N-2'}[s.calc_mode]||'';
+  document.getElementById('dlMeta').textContent=n+' rows - 20+ cols - '+s.purchase_key.replace(/_/g,' ').toUpperCase()+(cmLabel?' - '+cmLabel:'');
+  document.getElementById('dlBtnXlsx').href='/api/clients/'+clientId+'/runs/'+runId+'/download';
+  document.getElementById('dlBtnXlsx').download=filename;
+  document.getElementById('dlBtnBulk').href='/api/clients/'+clientId+'/runs/'+runId+'/download_bulk';
+  document.getElementById('dlBtnBulk').download=bulkFn||'bulk_import.xlsx';
+  document.getElementById('dlBtnRpt').href='/api/clients/'+clientId+'/runs/'+runId+'/download_report';
+  document.getElementById('dlBtnRpt').download=reportFn||'report.html';
+  document.getElementById('dlRows').textContent=n;
+  document.getElementById('dlAwsPm').textContent=fmt(s.total_aws_pm);
+  document.getElementById('dlAzPm').textContent=fmt(s.total_azure_3yr_pm);
+  document.getElementById('dlUpsized').textContent=s.upsized_count;
+  document.getElementById('mv1').textContent=n;
+  document.getElementById('mv2').textContent=s.prod_count;
+  document.getElementById('ms2').textContent=Math.round(s.prod_count/n*100)+'% of fleet';
+  document.getElementById('mv3').textContent=s.sql_count;
+  document.getElementById('ms3').textContent=Object.entries(s.sql_breakdown||{}).map(([k,v])=>v+' '+k).join(' - ')||'None';
+  document.getElementById('mv4').textContent=fmt(s.total_aws_pm);
+  document.getElementById('ms4').textContent=(s.purchase_key||'').replace(/_/g,' ');
+  document.getElementById('mv5').textContent=fmt(s.total_azure_3yr_pm);
+  document.getElementById('mv6').textContent=fmt(s.azure_saves_pm);
+  document.getElementById('sbAws').textContent=fmt(s.total_aws_py);
+  document.getElementById('sbAwsN').textContent=n+' instances';
+  document.getElementById('sbAz').textContent=fmt((s.total_azure_3yr_pm||0)*12);
+  document.getElementById('sbSave').textContent=fmt((s.azure_saves_pm||0)*12);
+  const sp=s.total_aws_pm>0?Math.round(s.azure_saves_pm/s.total_aws_pm*100):0;
+  document.getElementById('sbSaveN').textContent=sp+'% cheaper than AWS';
+  document.getElementById('sbUp').textContent=s.upsized_count+'/'+n;
+  document.getElementById('tcSV').textContent=(s.src_vcpu_total||0).toLocaleString();
+  document.getElementById('tcTV').textContent=(s.tgt_vcpu_total||0).toLocaleString();
+  document.getElementById('tcSM').textContent=fmtG(s.src_mem_total||0);
+  document.getElementById('tcTM').textContent=fmtG(s.tgt_mem_total||0);
+  const vd=(s.tgt_vcpu_total||0)-(s.src_vcpu_total||0);const md=(s.tgt_mem_total||0)-(s.src_mem_total||0);
+  document.getElementById('vDiff').innerHTML='<span class="dp '+(vd>0?'dp-up':'dp-dn')+'">'+(vd>0?'UP +'+vd.toLocaleString():vd===0?'= Same':'DOWN '+Math.abs(vd).toLocaleString())+' vCPU</span>';
+  document.getElementById('mDiff').innerHTML='<span class="dp '+(md>0?'dp-up':'dp-dn')+'">'+(md>0?'UP +'+fmtG(md):md===0?'= Same':'DOWN '+fmtG(Math.abs(md)))+' mem</span>';
+  donut('prodChart',['Production','Non-Prod'],[s.prod_count,s.nonprod_count],['#00e5a0','#6c63ff'],'prodLeg');
+  const sqlB=s.sql_breakdown||{};const noSql=n-s.sql_count;
+  donut('sqlChart',[...Object.keys(sqlB),'No SQL'],[...Object.values(sqlB),noSql],['#ff6b9d','#2196f3','#ffb347','#4f5a8a'].slice(0,Object.keys(sqlB).length+1),'sqlLeg');
+  const os=s.os_breakdown||{};
+  donut('osChart',Object.keys(os),Object.values(os),['#4fc3f7','#00e5c3','#ff6b9d','#9b95ff'],'osLeg');
+  const wf=s.wf_breakdown||{};const wfC=wf['Compute']||0,wfG=wf['General']||0,wfM=wf['Memory']||0;
+  document.getElementById('wfC').textContent=wfC;document.getElementById('wfCp').textContent=(wfC/n*100).toFixed(1)+'%';
+  document.getElementById('wfG').textContent=wfG;document.getElementById('wfGp').textContent=(wfG/n*100).toFixed(1)+'%';
+  document.getElementById('wfM').textContent=wfM;document.getElementById('wfMp').textContent=(wfM/n*100).toFixed(1)+'%';
+  const pfx=s.prefix_breakdown||{};const pfxDefs={c5a:{l:'Compute',c:'#4fc3f7'},c6a:{l:'Compute',c:'#4fc3f7'},c6i:{l:'Compute',c:'#4fc3f7'},m5a:{l:'General',c:'#9b95ff'},m6a:{l:'General',c:'#9b95ff'},m6i:{l:'General',c:'#9b95ff'},r5a:{l:'Memory',c:'#ff6b9d'},r6a:{l:'Memory',c:'#ff6b9d'},r6i:{l:'Memory',c:'#ff6b9d'},t3a:{l:'Burstable',c:'#ffd93d'},t3:{l:'Burstable',c:'#ffd93d'},t4g:{l:'Arm/Burst',c:'#ffd93d'},u7i:{l:'Ultra Mem',c:'#00e5c3'}};
+  const maxP=Math.max(...Object.values(pfx),1);
+  const ig=document.getElementById('instTypeGrid');ig.innerHTML='';
+  Object.entries(pfx).sort((a,b)=>b[1]-a[1]).forEach(([p,cnt])=>{const df=pfxDefs[p]||{l:'Other',c:'var(--t2)'};const pct=Math.round(cnt/n*100);ig.innerHTML+='<div class="it-card"><div class="it-prefix" style="color:'+df.c+'">'+p+'</div><div class="it-cnt" style="color:'+df.c+'">'+cnt+'</div><div class="it-pct">'+pct+'%</div><div class="it-bar" style="background:'+df.c+'20"><div style="height:100%;width:'+Math.round(cnt/maxP*100)+'%;background:'+df.c+';border-radius:2px"></div></div></div>';});
+  const fb=s.fam_breakdown||{};const fC={'Compute optimized':'#4fc3f7','General purpose':'#9b95ff','Memory optimized':'#ff6b9d'};const fI={'Compute optimized':'fa-bolt','General purpose':'fa-equals','Memory optimized':'fa-layer-group'};
+  const afb=document.getElementById('awsFamBreakdown');afb.innerHTML='';
+  Object.entries(fb).sort((a,b)=>b[1]-a[1]).forEach(([fam,cnt])=>{const col=fC[fam]||'var(--t2)';const ico=fI[fam]||'fa-server';const pct=Math.round(cnt/n*100);afb.innerHTML+='<div style="display:flex;align-items:center;gap:7px;padding:6px 10px;background:var(--s4);border:1px solid var(--br);border-radius:6px;flex:1;min-width:130px"><i class="fa-solid '+ico+'" style="font-size:13px;color:'+col+'"></i><div><div style="font-size:10px;font-weight:600;color:'+col+'">'+fam+'</div><div style="font-family:JetBrains Mono,monospace;font-size:12px;font-weight:700;color:var(--t1)">'+cnt+' <span style="font-size:10px;color:var(--t3);">('+pct+'%)</span></div></div></div>';});
+  const sv=s.src_vcpu_total||0,tv=s.tgt_vcpu_total||0,sm=s.src_mem_total||0,tm=s.tgt_mem_total||0;
+  const mxV=Math.max(sv,tv)||1,mxM=Math.max(sm,tm)||1;
+  document.getElementById('rdiff').innerHTML='<div style="font-size:9px;color:var(--t3);font-family:JetBrains Mono,monospace;margin-bottom:4px">'+n+' VMs - source to AWS recommended</div>'+
+    '<div class="rd-row"><span class="rd-lbl" style="color:var(--i)">Source vCPU</span><div class="rd-bar"><div class="rd-fill" style="width:'+(sv/mxV*100).toFixed(1)+'%;background:var(--i)"></div></div><span class="rd-num" style="color:var(--i)">'+sv.toLocaleString()+'</span></div>'+
+    '<div class="rd-row"><span class="rd-lbl" style="color:var(--tl)">Target vCPU</span><div class="rd-bar"><div class="rd-fill" style="width:'+(tv/mxV*100).toFixed(1)+'%;background:var(--tl)"></div></div><span class="rd-num" style="color:var(--tl)">'+tv.toLocaleString()+'</span></div>'+
+    '<div style="height:1px;background:var(--br);margin:5px 0"></div>'+
+    '<div class="rd-row"><span class="rd-lbl" style="color:var(--i)">Source Mem</span><div class="rd-bar"><div class="rd-fill" style="width:'+(sm/mxM*100).toFixed(1)+'%;background:var(--i)"></div></div><span class="rd-num" style="color:var(--i)">'+fmtG(sm)+'</span></div>'+
+    '<div class="rd-row"><span class="rd-lbl" style="color:var(--tl)">Target Mem</span><div class="rd-bar"><div class="rd-fill" style="width:'+(tm/mxM*100).toFixed(1)+'%;background:var(--tl)"></div></div><span class="rd-num" style="color:var(--tl)">'+fmtG(tm)+'</span></div>';
+  const grp=s.group_breakdown||{};const mxG=Math.max(...Object.values(grp).map(v=>v.count),1);
+  const gl=document.getElementById('grpList');gl.innerHTML='';
+  Object.entries(grp).sort((a,b)=>b[1].count-a[1].count).forEach(([g,v])=>{gl.innerHTML+='<div class="grp-row"><span class="grp-name">'+g+'</span><div class="grp-bar"><div class="grp-fill" style="width:'+Math.round(v.count/mxG*100)+'%"></div></div><span class="grp-cnt">'+v.count+'</span><span class="grp-cost">'+fmt(v.pm)+'/mo</span></div>';});
+  const ex1=Chart.getChart(document.getElementById('costChart'));if(ex1)ex1.destroy();
+  new Chart(document.getElementById('costChart'),{type:'bar',data:{labels:['AWS/mo','Azure PAYG/mo','Azure 3yr/mo'],datasets:[{data:[s.total_aws_pm,s.total_aws_pm*1.4,s.total_azure_3yr_pm],backgroundColor:['rgba(255,153,0,.75)','rgba(33,150,243,.35)','rgba(33,150,243,.8)'],borderColor:['rgba(255,153,0,.9)','rgba(33,150,243,.5)','rgba(33,150,243,.95)'],borderWidth:1,borderRadius:4}]},options:{...co,scales:{...co.scales,y:{...co.scales.y,ticks:{...co.scales.y.ticks,callback:v=>'$'+(v/1000).toFixed(0)+'K'}}}}});
+  const ex2=Chart.getChart(document.getElementById('famCostChart'));if(ex2)ex2.destroy();
+  new Chart(document.getElementById('famCostChart'),{type:'bar',data:{labels:['Compute Opt.','General Purp.','Memory Opt.'],datasets:[{label:'Count',data:['Compute optimized','General purpose','Memory optimized'].map(f=>fb[f]||0),backgroundColor:['rgba(79,195,247,.7)','rgba(108,99,255,.7)','rgba(255,107,157,.7)'],borderColor:['rgba(79,195,247,.9)','rgba(108,99,255,.9)','rgba(255,107,157,.9)'],borderWidth:1,borderRadius:4}]},options:{...co}});
+  renderClientHistory(clientId);
+}
+
+// CLIENTS
+let allClients=[];
+async function loadClients(){
+  const r=await fetch('/api/clients');allClients=await r.json();
+  document.getElementById('clientsBadge').textContent=allClients.length;
+  renderClientList(allClients);
+}
+function renderClientList(clients){
+  const list=document.getElementById('clientList');list.innerHTML='';
+  if(!clients.length){list.innerHTML='<div style="padding:20px 14px;text-align:center;font-size:11px;color:var(--t4)">No clients yet. Run the optimizer to start tracking.</div>';return;}
+  clients.forEach(c=>{
+    const runs=c.runs||[];const lr=runs[0];
+    const ts=lr?new Date(lr.timestamp).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'Never';
+    const el=document.createElement('div');el.className='client-item';
+    el.innerHTML='<div class="ci-name">'+c.name+'</div><div class="ci-meta">Last run: '+ts+' - '+runs.length+' run'+(runs.length!==1?'s':'')+' </div>'+(lr&&lr.summary?'<div class="ci-cost">'+fmt(lr.summary.total_aws_pm)+'/mo AWS - '+lr.input_rows+' VMs</div>':'');
+    el.onclick=()=>showClientRuns(c);list.appendChild(el);
+  });
+}
+function filterClients(q){renderClientList(allClients.filter(c=>c.name.toLowerCase().includes(q.toLowerCase())));}
+function showClientRuns(client){
+  viewMode='client_history';
+  // Show full dashboard with the most recent run's data
+  document.getElementById('welcomeState').style.display='none';
+  document.getElementById('progArea').style.display='none';
+  document.getElementById('dashArea').classList.remove('hidden');
+  
+  // If client has runs, load and display the latest run's data
+  if (client.runs && client.runs.length > 0) {
+    const latestRun = client.runs[0];
+    if (latestRun.summary) {
+      // Show all dashboard panels with data from latest run
+      document.getElementById('dlPanel').style.display='';
+      renderDash(latestRun.summary, client.id, latestRun.id, latestRun.filename, 
+                 latestRun.bulk_filename, latestRun.report_filename);
+    }
+  }
+  
+  // Scroll to history panel
+  document.getElementById('historyPanel').scrollIntoView({behavior:'smooth'});
+}
+
+let currentClientId = null;
+
+function renderClientHistory(clientId){
+  const client=allClients.find(c=>c.id===clientId);if(!client)return;
+  currentClientId = clientId;
+  const panel=document.getElementById('historyPanel');const list=document.getElementById('runList');
+  panel.style.display='block';
+  document.getElementById('histTitle').textContent=client.name+' - Run History';
+  document.getElementById('histSub').textContent=client.runs.length+' runs - Created '+new Date(client.created_at).toLocaleDateString();
+  list.innerHTML='';
+  if(!client.runs.length){list.innerHTML='<div style="padding:14px;font-size:11px;color:var(--t4)">No runs yet.</div>';return;}
+  client.runs.forEach(run=>{
+    const ts=new Date(run.timestamp).toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    const pm=run.summary&&run.summary.total_aws_pm;const az=run.summary&&run.summary.total_azure_3yr_pm;
+    const pk=(run.purchase_key||run.summary?.purchase_key||'—').replace(/_/g,' ');
+    const cmMap={'like_to_like':'Like-to-Like','optimized_n1':'Optimized N-1','optimized_n2':'Optimized N-2'};
+    const cm=cmMap[run.calc_mode||run.summary?.calc_mode]||'';
+    const displayName = run.label ? run.label : run.filename;
+    const el=document.createElement('div');el.className='run-item';
+    el.innerHTML=
+      '<div class="run-left">'+
+        '<div class="run-filename"><i class="fa-solid fa-file-excel" style="color:var(--grn);margin-right:4px;font-size:10px"></i>'+displayName+(run.label?' <span style="color:var(--t4);font-size:9px">('+run.filename+')</span>':'')+'</div>'+
+        '<div class="run-meta">'+ts+' &nbsp;&middot;&nbsp; '+run.input_rows+' VMs &nbsp;&middot;&nbsp; '+run.collection+'</div>'+
+        '<div style="margin-top:3px;display:flex;gap:5px"><span class="pricing-badge">'+pk+'</span>'+(cm?'<span class="pricing-badge" style="background:rgba(0,229,195,.1);border-color:rgba(0,229,195,.2);color:var(--tl)">'+cm+'</span>':'')+'</div>'+
+      '</div>'+
+      '<div class="run-cost-right">'+(pm?'<div class="run-aws">'+fmt(pm)+'/mo</div><div class="run-az">Azure: '+fmt(az||0)+'/mo</div>':'')+' </div>'+
+      '<div class="run-dl-btns">'+
+        '<a class="run-dl-btn btn-xlsx" href="/api/clients/'+client.id+'/runs/'+run.id+'/download" download="'+run.filename+'"><i class="fa-solid fa-file-excel" style="font-size:10px"></i>XLSX</a>'+
+        (run.bulk_path?'<a class="run-dl-btn btn-bulk" href="/api/clients/'+client.id+'/runs/'+run.id+'/download_bulk" download="'+(run.bulk_filename||'bulk.xlsx')+'"><i class="fa-solid fa-file-import" style="font-size:10px"></i>Bulk</a>':'')+
+        (run.report_path?'<a class="run-dl-btn btn-rpt" href="/api/clients/'+client.id+'/runs/'+run.id+'/download_report" download="'+(run.report_filename||'report.html')+'"><i class="fa-solid fa-chart-bar" style="font-size:10px"></i>Report</a>':'')+
+      '</div>'+
+      '<button class="run-del-btn" style="background:rgba(108,99,255,.08);border-color:rgba(108,99,255,.2);color:var(--i2)" onclick="editRun(\''+client.id+'\',\''+run.id+'\',\''+displayName.replace(/'/g,"\\'")+'\',event)" title="Rename this run"><i class="fa-solid fa-pen" style="font-size:10px"></i></button>'+
+      '<button class="run-del-btn" onclick="deleteRun(\''+client.id+'\',\''+run.id+'\',event)" title="Delete this run"><i class="fa-solid fa-trash" style="font-size:10px"></i></button>';
+    list.appendChild(el);
+  });
+}
+
+async function editRun(clientId,runId,currentLabel,e){
+  e.stopPropagation();
+  const newLabel = prompt('Rename this run:', currentLabel);
+  if(newLabel===null) return;               // cancelled
+  const trimmed = newLabel.trim();
+  if(!trimmed) { alert('Label cannot be empty.'); return; }
+  const res = await fetch('/api/clients/'+clientId+'/runs/'+runId+'/edit',{
+    method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({label: trimmed})
+  });
+  const d = await res.json();
+  if(d.error){ alert('Error: '+d.error); return; }
+  await loadClients();
+  const client=allClients.find(c=>c.id===clientId);
+  if(client) renderClientHistory(clientId);
+}
+
+async function renameCurrentClient(){
+  if(!currentClientId) return;
+  const client=allClients.find(c=>c.id===currentClientId);
+  if(!client) return;
+  const newName = prompt('Rename client:', client.name);
+  if(newName===null) return;
+  const trimmed = newName.trim();
+  if(!trimmed){ alert('Name cannot be empty.'); return; }
+  const res = await fetch('/api/clients/'+currentClientId+'/rename',{
+    method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({name: trimmed})
+  });
+  const d = await res.json();
+  if(d.error){ alert('Error: '+d.error); return; }
+  await loadClients();
+  const updated=allClients.find(c=>c.id===currentClientId);
+  if(updated) renderClientHistory(currentClientId);
+}
+
+async function deleteCurrentClient(){
+  if(!currentClientId) return;
+  const client=allClients.find(c=>c.id===currentClientId);
+  if(!client) return;
+  if(!confirm('Delete "'+client.name+'" and ALL of their run history? This cannot be undone.')) return;
+  await fetch('/api/clients/'+currentClientId+'/delete',{method:'DELETE'});
+  currentClientId = null;
+  await loadClients();
+  resetToWelcome();
+}
+
+async function deleteRun(clientId,runId,e){
+  e.stopPropagation();
+  if(!confirm('Delete this run? This will remove it from history.'))return;
+  await fetch('/api/clients/'+clientId+'/runs/'+runId+'/delete',{method:'DELETE'});
+  await loadClients();
+  // Refresh the client's history view
+  const client=allClients.find(c=>c.id===clientId);
+  if(client) showClientRuns(client);
+}
+
+// INIT
+function resetToWelcome() {
+  viewMode = 'welcome';
+  ownResult = null;
+  document.getElementById('welcomeState').style.display = 'flex';
+  document.getElementById('progArea').style.display = 'none';
+  document.getElementById('dashArea').classList.add('hidden');
+  document.getElementById('historyPanel').style.display = 'none';
+  document.getElementById('dlPanel').style.display = '';
+  document.getElementById('calcLog').innerHTML = '';
+  document.getElementById('calcFill').style.width = '0%';
+  document.getElementById('calcPct').textContent = '0%';
+  document.getElementById('calcStep').textContent = 'Preparing';
+  for (let i = 0; i < 4; i++) {
+    document.getElementById('cst'+i).classList.remove('active','done');
+    document.getElementById('cv'+i).textContent = '\u2014';
+  }
+  document.getElementById('runBtn').disabled = false;
+  document.getElementById('runTxt').innerHTML = '<i class="fa-solid fa-play" style="font-size:11px;margin-right:5px"></i>Run Optimizer';
+  uploadedFileId = null;
+  document.getElementById('fileStatus').style.display = 'none';
+  document.getElementById('changeFileBtn').style.display = 'none';
+  document.getElementById('dropZ').style.borderColor = '';
+  document.getElementById('dropZ').classList.remove('file-ok');
+}
+
+buildRL('');
+resetToWelcome();
+loadClients();
+</script>
+</body>
+</html>
