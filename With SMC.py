@@ -1150,6 +1150,20 @@ def download_run_bulk(client_id, run_id):
     if not path.exists(): abort(404, 'Bulk import file not found')
     return send_file(path, as_attachment=True, download_name=path.name)
 
+@app.route('/api/clients/<client_id>/runs/<run_id>/download_bulk_part/<int:part_no>')
+def download_run_bulk_part(client_id, run_id, part_no):
+    clients = load_clients()
+    client  = next((c for c in clients if c['id'] == client_id), None)
+    if not client: abort(404)
+    run = next((r for r in client['runs'] if r['id'] == run_id), None)
+    if not run: abort(404)
+    bulk_files = run.get('bulk_files', [])
+    idx = part_no - 1
+    if idx < 0 or idx >= len(bulk_files): abort(404, 'Part not found')
+    path = OUTPUT_DIR / bulk_files[idx]
+    if not path.exists(): abort(404, 'Bulk import part file not found on disk')
+    return send_file(path, as_attachment=True, download_name=path.name)
+
 @app.route('/api/clients/<client_id>/runs/<run_id>/download_smc')
 def download_run_smc(client_id, run_id):
     """Download the SMC service discovery workbook (AWS_SMC_*.xlsx or Azure_SMC_*.xlsx)."""
@@ -1606,135 +1620,56 @@ def handle_start_run(data):
 
             results_aws = {}
 
+            # per-row sizing decisions for output columns (utilization_based mode)
+            row_cpu_modes = {}
+            row_mem_modes = {}
+
             def do_aws(args):
-        
-                  idx, row = args
+                idx, row = args
+                vc  = int(row.get('vCPU', 0) or 0)
+                mem = float(row.get('Memory', 0) or 0)
+                os_ = str(row.get('Operating System', 'Linux'))
+                ten = str(row.get('Tenancy', 'Shared'))
+                lic = str(row.get('License Model', 'No License required'))
+                sw  = str(row.get('Pre Installed S/W', 'NA'))
+                ip  = str(row.get('Production Servers', '')).strip().lower() == 'yes'
 
-                  vc  = int(row.get('vCPU',0) or 0)
-                  mem = float(row.get('Memory',0) or 0)
- 
-                  os_ = str(row.get('Operating System','Linux'))
-                  ten = str(row.get('Tenancy','Shared'))
-                  lic = str(row.get('License Model','No License required'))
-                  sw  = str(row.get('Pre Installed S/W','NA'))
+                if calc_mode == "utilization_based":
+                    # NaN-safe read — pandas NaN is a float so "or 0" won't catch it
+                    cpu_raw = row.get("CPU Utilization %", 0)
+                    mem_raw = row.get("Memory Utilization %", 0)
+                    cpu_util = 0.0 if (cpu_raw is None or (isinstance(cpu_raw, float) and pd.isna(cpu_raw))) else float(cpu_raw)
+                    mem_util = 0.0 if (mem_raw is None or (isinstance(mem_raw, float) and pd.isna(mem_raw))) else float(mem_raw)
 
-                  ip = (
-                        str(
-                            row.get(
-                                'Production Servers',
-                                ''
-                            )
-                        ).strip().lower() == 'yes'
-                    )
+                    cpu_mode = "like_to_like" if cpu_util > 70 else ("optimized_n2" if cpu_util <= 30 else "optimized_n1")
+                    mem_mode = "like_to_like" if mem_util > 70 else ("optimized_n2" if mem_util <= 30 else "optimized_n1")
 
-                    #
-                    # Utilization based sizing
-                    #
-            if calc_mode == "utilization_based":
+                    cpu_target, _ = resolve_target_dims(cpu_mode, vc, mem)
+                    _, mem_target = resolve_target_dims(mem_mode, vc, mem)
+                    tgt_vc  = cpu_target
+                    tgt_mem = mem_target
 
-                        cpu_util = float(
-                            row.get(
-                                "CPU Utilization %",
-                                0
-                            ) or 0
-                        )
+                    row_cpu_modes[idx] = cpu_mode
+                    row_mem_modes[idx] = mem_mode
+                else:
+                    tgt_vc, tgt_mem = resolve_target_dims(calc_mode, vc, mem)
 
-                        mem_util = float(
-                            row.get(
-                                "Memory Utilization %",
-                                0
-                            ) or 0
-                        )
+                res = cheapest_like_to_like_aws(
+                    aws_coll, tgt_vc, tgt_mem, os_, ten, lic, sw,
+                    ip, lease, purchase, offering, aws_cache, min_gen_pref
+                )
 
-                        #
-                        # CPU Mode
-                        #
-                        if cpu_util > 70:
+                if idx % max(1, total_rows // 15) == 0:
+                    pct = 22 + (idx / total_rows) * 34
+                    socketio.emit('progress', {
+                        'pct': round(pct, 1),
+                        'step': 'AWS Query',
+                        'expr': f'Row {idx+1}/{total_rows}: {tgt_vc}vCPU {tgt_mem}GiB {os_}',
+                        'log':  f'AWS: {idx+1}/{total_rows} processed',
+                        'color': '#ff9900'
+                    }, to=sid)
 
-                            cpu_mode = "like_to_like"
-
-                        elif cpu_util <= 30:
-
-                            cpu_mode = "optimized_n2"
-
-                        else:
-
-                            cpu_mode = "optimized_n1"
-
-                        #
-                        # Memory Mode
-                        #
-                        if mem_util > 70:
-
-                            mem_mode = "like_to_like"
-
-                        elif mem_util <= 30:
-
-                            mem_mode = "optimized_n2"
-
-                        else:
-
-                            mem_mode = "optimized_n1"
-
-                        #
-                        # Reuse existing N-1/N-2 logic
-                        #
-                        cpu_target, _ = resolve_target_dims(
-                            cpu_mode,
-                            vc,
-                            mem
-                        )
-
-                        _, mem_target = resolve_target_dims(
-                            mem_mode,
-                            vc,
-                            mem
-                        )
-
-                        tgt_vc = cpu_target
-                        tgt_mem = mem_target
-
-            else:
-
-                        tgt_vc, tgt_mem = resolve_target_dims(
-                            calc_mode,
-                            vc,
-                            mem
-                        )
-
-            res = cheapest_like_to_like_aws(
-                        aws_coll,
-                        tgt_vc,
-                        tgt_mem,
-                        os_,
-                        ten,
-                        lic,
-                        sw,
-                        ip,
-                        lease,
-                        purchase,
-                        offering,
-                        aws_cache,
-                        min_gen_pref
-                    )
-
-            if idx % max(1, total_rows//15) == 0:
-
-                        pct = 22 + (idx/total_rows)*34
-
-                        socketio.emit(
-                            'progress',
-                            {
-                                'pct': round(pct,1),
-                                'step': 'AWS Query',
-                                'expr': f'Row {idx+1}/{total_rows}: {tgt_vc}vCPU {tgt_mem}GiB {os_}',
-                                'log': f'AWS: {idx+1}/{total_rows} processed',
-                                'color': '#ff9900'
-                            },
-                            to=sid
-                        )
-
-            return idx, res
+                return idx, res
 
             # Use ThreadPoolExecutor — mongo operations are I/O bound
             with concurrent.futures.ThreadPoolExecutor(max_workers=12) as ex:
@@ -1774,6 +1709,21 @@ def handle_start_run(data):
                 except Exception:
                     ds_flag.append('No'); us_flag.append('No')
 
+                # Utilization & sizing decision columns
+                if calc_mode == 'utilization_based':
+                    cpu_raw = row.get('CPU Utilization %', '')
+                    mem_raw = row.get('Memory Utilization %', '')
+                    cpu_utils.append('' if (cpu_raw is None or (isinstance(cpu_raw, float) and pd.isna(cpu_raw))) else cpu_raw)
+                    mem_utils.append('' if (mem_raw is None or (isinstance(mem_raw, float) and pd.isna(mem_raw))) else mem_raw)
+                    mode_label = {'like_to_like': 'Like-to-Like', 'optimized_n1': 'N-1', 'optimized_n2': 'N-2'}
+                    sizing_decisions.append(
+                        f"CPU:{mode_label.get(row_cpu_modes.get(i,''),'')}, MEM:{mode_label.get(row_mem_modes.get(i,''),'')}"
+                    )
+                else:
+                    cpu_utils.append('')
+                    mem_utils.append('')
+                    sizing_decisions.append('')
+
             df['AWS Recommended vCPU']          = aws_vcpus
             df['AWS Recommended Memory']         = aws_mems
             df['AWS Recommended Instance Type']  = aws_insts
@@ -1784,6 +1734,10 @@ def handle_start_run(data):
             df['PricePerHour']                   = ph_list
             df['PricePerMonth']                  = pm_list
             df['PricePerYear']                   = py_list
+            if calc_mode == 'utilization_based':
+                df['CPU Utilization %']    = cpu_utils
+                df['Memory Utilization %'] = mem_utils
+                df['Sizing Decision']      = sizing_decisions
 
             # ── Step 5: Write output Excel ────────────────────────────────────
             ep(80,'Writing Excel','df.to_excel + openpyxl color coding',
@@ -1825,66 +1779,40 @@ def handle_start_run(data):
             ep(86,'Bulk import','Generating AWS Pricing Calculator bulk import XLSX',
                'Building bulk import template...','#4fc3f7')
             if len(records) > 4000:
-    
-             bulk_files = []
-
-             for start_idx in range(
-                0,
-                len(records),
-                4000
-            ):
-
-              end_idx = start_idx + 4000
-
-        part_records = records[start_idx:end_idx]
-        part_aws     = aws_insts[start_idx:end_idx]
-
-        part_no = (start_idx // 4000) + 1
-
-        bulk_file_name = (
-            f"BulkImport_{safe_client}_{ts}_Part{part_no}.xlsx"
-        )
-
-        bulk_file_path = (
-            OUTPUT_DIR / bulk_file_name
-        )
-
-        bulk_info = generate_bulk_import(
-            part_records,
-            part_aws,
-            aws_coll_name,
-            purchase_key,
-            bulk_file_path,
-            client_name=client_name
-        )
-
-        bulk_files.append(
-            bulk_file_name
-        )
-
-        bulk_fn = ", ".join(bulk_files)
-        bulk_path = ""
-
-        suggested_top_group = bulk_info['suggested_top_group']
-        ec2_group_name      = bulk_info['ec2_group_name']
-        
-        else:
-
-    bulk_fn = f'BulkImport_{safe_client}_{ts}.xlsx'
-
-    bulk_path = OUTPUT_DIR / bulk_fn
-
-    bulk_info = generate_bulk_import(
-        records,
-        aws_insts,
-        aws_coll_name,
-        purchase_key,
-        bulk_path,
-        client_name=client_name
-    )
-
-    suggested_top_group = bulk_info['suggested_top_group']
-    ec2_group_name      = bulk_info['ec2_group_name']
+                bulk_files = []
+                for start_idx in range(0, len(records), 4000):
+                    end_idx = start_idx + 4000
+                    part_records = records[start_idx:end_idx]
+                    part_aws     = aws_insts[start_idx:end_idx]
+                    part_no = (start_idx // 4000) + 1
+                    bulk_file_name = f"BulkImport_{safe_client}_{ts}_Part{part_no}.xlsx"
+                    bulk_file_path = OUTPUT_DIR / bulk_file_name
+                    bulk_info = generate_bulk_import(
+                        part_records,
+                        part_aws,
+                        aws_coll_name,
+                        purchase_key,
+                        bulk_file_path,
+                        client_name=client_name
+                    )
+                    bulk_files.append(bulk_file_name)
+                bulk_fn = ", ".join(bulk_files)
+                bulk_path = ""
+                suggested_top_group = bulk_info['suggested_top_group']
+                ec2_group_name      = bulk_info['ec2_group_name']
+            else:
+                bulk_fn = f'BulkImport_{safe_client}_{ts}.xlsx'
+                bulk_path = OUTPUT_DIR / bulk_fn
+                bulk_info = generate_bulk_import(
+                    records,
+                    aws_insts,
+                    aws_coll_name,
+                    purchase_key,
+                    bulk_path,
+                    client_name=client_name
+                )
+                suggested_top_group = bulk_info['suggested_top_group']
+                ec2_group_name      = bulk_info['ec2_group_name']
             # ── Step 6b: SMC service discovery workbook ───────────────────────
             ep(89, 'SMC discovery', 'build_aws_smc_services(records)',
                'Discovering required AWS services...', '#9b95ff')
@@ -1944,10 +1872,12 @@ def handle_start_run(data):
             report_path.write_text(html_report, encoding='utf-8')
 
             # ── Step 9: Save client record ────────────────────────────────────
+            _bulk_files_list = bulk_files if len(records) > 4000 else [bulk_fn]
             run_meta = {
                 'id': run_id, 'timestamp': datetime.now().isoformat(),
                 'filename': out_fn, 'output_path': str(out_path),
-                'bulk_filename': bulk_fn,'bulk_path': str(bulk_path) if bulk_path else '',
+                'bulk_filename': bulk_fn, 'bulk_path': str(bulk_path) if bulk_path else '',
+                'bulk_files': _bulk_files_list,
                 'report_filename': report_fn, 'report_path': str(report_path),
                 'smc_filename': smc_fn, 'smc_path': str(smc_path),
                 'input_rows': total_rows, 'collection': aws_coll_name,
@@ -2014,7 +1944,8 @@ if __name__ == '__main__':
         sys.exit(0)
 
     print('\n' + '='*60)
-    print('  Cloud Instance Optimizer  —  http://localhost:5000')
+    PORT = int(os.environ.get('PORT', 5001))
+    print(f'  Cloud Instance Optimizer  —  http://localhost:{PORT}')
     print('='*60)
     print(f'  Base dir:  {BASE_DIR}')
     print(f'  Uploads:   {UPLOAD_DIR}')
@@ -2031,4 +1962,4 @@ if __name__ == '__main__':
     print('  Tip: load pricing data for a new region without starting the server:')
     print('       python "With SMC.py" --load-pricing --regions af-south-1 us-west-1')
     print('='*60 + '\n')
-    socketio.run(app, host='0.0.0.0', port=5000, debug=False, allow_unsafe_werkzeug=True)
+    socketio.run(app, host='0.0.0.0', port=PORT, debug=False, allow_unsafe_werkzeug=True)

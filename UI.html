@@ -540,7 +540,7 @@ html,body{width:100%;height:100vh;background:var(--bg);font-family:'Outfit',sans
           <input type="file" id="fileInp" accept=".xlsx,.xls" onchange="uploadFile(this)"/>
           <div class="drop-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
           <div class="drop-main">Drop Excel or click to browse</div>
-          <div class="drop-sub" id="dropSubHint">vCPU · Memory · OS · Tenancy · License · S/W</div>
+          <div class="drop-sub" id="dropSubHint">vCPU · Memory · CPU Utilization % · Memory Utilization % · OS · Tenancy · License · S/W</div>
         </div>
         <div class="file-status" id="fileStatus"></div>
         <button id="changeFileBtn" onclick="changeFile()" style="display:none;width:100%;margin-top:5px;padding:6px;background:rgba(108,99,255,.1);border:1px solid rgba(108,99,255,.25);border-radius:6px;color:var(--i2);font-family:Outfit,sans-serif;font-size:11px;cursor:pointer;transition:.15s" onmouseover="this.style.background='rgba(108,99,255,.2)'" onmouseout="this.style.background='rgba(108,99,255,.1)'"><i class="fa-solid fa-arrows-rotate" style="margin-right:4px;font-size:10px"></i>Change File</button>
@@ -608,7 +608,7 @@ html,body{width:100%;height:100vh;background:var(--bg);font-family:'Outfit',sans
         </div>
         <div class="dl-btns">
           <a class="dl-btn dl-btn-main" id="dlBtnXlsx" href="#" download><i class="fa-solid fa-download" style="font-size:11px"></i>Download XLSX</a>
-          <a class="dl-btn dl-btn-bulk" id="dlBtnBulk" href="#" download><i class="fa-solid fa-file-import" style="font-size:11px"></i>Bulk Import</a>
+          <span id="dlBulkBtns"></span>
           <a class="dl-btn dl-btn-rpt" id="dlBtnRpt" href="#" download><i class="fa-solid fa-chart-bar" style="font-size:11px"></i>HTML Report</a>
           <a class="dl-btn dl-btn-smc" id="dlBtnSMC" href="#" download><i class="fa-solid fa-diagram-project" style="font-size:11px"></i>Download SMC</a>
         </div>
@@ -791,9 +791,10 @@ function updateCalcModePreview() {
   const mode = document.getElementById('calcMode').value;
   const gen  = document.getElementById('minGeneration').value;
   const previews = {
-    'like_to_like': '→ Cheapest instance ≥ source vCPU &amp; Memory (no downsizing)',
-    'optimized_n1': '→ Downsizes once (vCPU÷2 if ≥8, Memory÷2 if ≥16), then cheapest match',
-    'optimized_n2': '→ Downsizes twice — more aggressive right-sizing, then cheapest match',
+    'like_to_like':      '→ Cheapest instance ≥ source vCPU &amp; Memory (no downsizing)',
+    'optimized_n1':      '→ Downsizes once (vCPU÷2 if ≥8, Memory÷2 if ≥16), then cheapest match',
+    'optimized_n2':      '→ Downsizes twice — more aggressive right-sizing, then cheapest match',
+    'utilization_based': '→ CPU &gt;70%: Like-to-Like · 30–70%: N-1 · ≤30%: N-2 &nbsp;|&nbsp; Memory &gt;70%: Like-to-Like · 30–70%: N-1 · ≤30%: N-2',
   };
   document.getElementById('calcModePreview').innerHTML = (previews[mode] || '') + ' · ' + gen + 'th gen+ preferred';
 }
@@ -839,7 +840,7 @@ function showTab(name,el){
       document.getElementById('progArea').style.display='none';
       document.getElementById('dashArea').classList.remove('hidden');
       document.getElementById('dlPanel').style.display='';
-      renderDash(ownResult.summary, ownResult.clientId, ownResult.runId, ownResult.filename, ownResult.bulkFn, ownResult.reportFn, ownResult.smcFn);
+      renderDash(ownResult.summary, ownResult.clientId, ownResult.runId, ownResult.filename, ownResult.bulkFn, ownResult.reportFn, ownResult.smcFn, ownResult.bulkFiles);
     } else {
       resetToWelcome();
     }
@@ -859,7 +860,7 @@ function setPlatform(p){
   if(p==='aws'){
     awsBtn.style.background='rgba(255,153,0,.15)'; awsBtn.style.borderColor='rgba(255,153,0,.4)'; awsBtn.style.color='var(--aws)';
     azBtn.style.background='var(--s3)'; azBtn.style.borderColor='var(--br)'; azBtn.style.color='var(--t3)';
-    document.getElementById('dropSubHint').textContent='vCPU · Memory · OS · Tenancy · License · S/W';
+    document.getElementById('dropSubHint').textContent='vCPU · Memory · CPU Utilization % · Memory Utilization % · OS · Tenancy · License · S/W';
   } else {
     azBtn.style.background='rgba(0,120,212,.15)'; azBtn.style.borderColor='rgba(0,120,212,.4)'; azBtn.style.color='#0078d4';
     awsBtn.style.background='var(--s3)'; awsBtn.style.borderColor='var(--br)'; awsBtn.style.color='var(--t3)';
@@ -1027,8 +1028,8 @@ socket.on('run_complete',d=>{
   document.getElementById('dashArea').classList.remove('hidden');
   document.getElementById('dlPanel').style.display='';
   viewMode='own_result';
-  ownResult={summary:d.summary,clientId:d.client_id,runId:d.run_id,filename:d.filename,bulkFn:d.bulk_filename,reportFn:d.report_filename,smcFn:d.smc_filename};
-  renderDash(d.summary,d.client_id,d.run_id,d.filename,d.bulk_filename,d.report_filename,d.smc_filename);
+  ownResult={summary:d.summary,clientId:d.client_id,runId:d.run_id,filename:d.filename,bulkFn:d.bulk_filename,reportFn:d.report_filename,smcFn:d.smc_filename,bulkFiles:d.bulk_files};
+  renderDash(d.summary,d.client_id,d.run_id,d.filename,d.bulk_filename,d.report_filename,d.smc_filename,d.bulk_files);
   loadClients();
 });
 
@@ -1067,17 +1068,25 @@ function donut(id,labels,data,colors,legId){
 }
 
 // RENDER DASHBOARD
-function renderDash(s,clientId,runId,filename,bulkFn,reportFn,smcFn){
+function renderDash(s,clientId,runId,filename,bulkFn,reportFn,smcFn,bulkFiles){
   const n=s.total_rows;
   document.getElementById('dlFilename').textContent=filename;
-  const cmLabel={'like_to_like':'LIKE-TO-LIKE','optimized_n1':'OPTIMIZED N-1','optimized_n2':'OPTIMIZED N-2'}[s.calc_mode]||'';
+  const cmLabel={'like_to_like':'LIKE-TO-LIKE','optimized_n1':'OPTIMIZED N-1','optimized_n2':'OPTIMIZED N-2','utilization_based':'UTILIZATION BASED'}[s.calc_mode]||'';
   const genLabel=s.min_generation?(s.min_generation+'TH GEN+'):'';
   document.getElementById('dlMeta').textContent=n+' rows - 20+ cols - '+s.purchase_key.replace(/_/g,' ').toUpperCase()+(cmLabel?' - '+cmLabel:'')+(genLabel?' - '+genLabel:'');
   document.getElementById('dlBtnXlsx').href='/api/clients/'+clientId+'/runs/'+runId+'/download';
   document.getElementById('dlBtnXlsx').download=filename;
-  const bulkBtn=document.getElementById('dlBtnBulk'), rptBtn=document.getElementById('dlBtnRpt'), smcBtn=document.getElementById('dlBtnSMC');
-  if(bulkFn){ bulkBtn.style.display=''; bulkBtn.href='/api/clients/'+clientId+'/runs/'+runId+'/download_bulk'; bulkBtn.download=bulkFn; }
-  else { bulkBtn.style.display='none'; }
+  const bulkContainer=document.getElementById('dlBulkBtns');
+  bulkContainer.innerHTML='';
+  const files=bulkFiles&&bulkFiles.length?bulkFiles:(bulkFn?[bulkFn]:[]);
+  if(files.length===1){
+    bulkContainer.innerHTML='<a class="dl-btn dl-btn-bulk" href="/api/clients/'+clientId+'/runs/'+runId+'/download_bulk_part/1" download="'+files[0]+'"><i class="fa-solid fa-file-import" style="font-size:11px"></i>Bulk Import</a>';
+  } else if(files.length>1){
+    files.forEach((fn,i)=>{
+      bulkContainer.innerHTML+='<a class="dl-btn dl-btn-bulk" href="/api/clients/'+clientId+'/runs/'+runId+'/download_bulk_part/'+(i+1)+'" download="'+fn+'"><i class="fa-solid fa-file-import" style="font-size:11px"></i>Bulk File '+(i+1)+'</a>';
+    });
+  }
+  const rptBtn=document.getElementById('dlBtnRpt'), smcBtn=document.getElementById('dlBtnSMC');
   if(reportFn){ rptBtn.style.display=''; rptBtn.href='/api/clients/'+clientId+'/runs/'+runId+'/download_report'; rptBtn.download=reportFn; }
   else { rptBtn.style.display='none'; }
   if(smcFn){ smcBtn.style.display=''; smcBtn.href='/api/clients/'+clientId+'/runs/'+runId+'/download_smc'; smcBtn.download=smcFn; }
@@ -1187,8 +1196,8 @@ function showClientRuns(client){
     if (latestRun.summary) {
       // Show all dashboard panels with data from latest run
       document.getElementById('dlPanel').style.display='';
-      renderDash(latestRun.summary, client.id, latestRun.id, latestRun.filename, 
-                 latestRun.bulk_filename, latestRun.report_filename, latestRun.smc_filename);
+      renderDash(latestRun.summary, client.id, latestRun.id, latestRun.filename,
+                 latestRun.bulk_filename, latestRun.report_filename, latestRun.smc_filename, latestRun.bulk_files);
     }
   }
   
