@@ -43,7 +43,6 @@ html,body{width:100%;height:100vh;background:var(--bg);font-family:'Outfit',sans
 .pill{padding:3px 9px;border-radius:20px;font-size:10px;font-family:'JetBrains Mono',monospace;font-weight:600;border:1px solid;transition:transform .2s,box-shadow .2s}
 .pill-aws{background:rgba(255,153,0,.07);border-color:rgba(255,153,0,.2);color:var(--aws);box-shadow:0 0 12px rgba(255,153,0,.15)}
 .pill-aws:hover{transform:scale(1.05);box-shadow:0 0 20px rgba(255,153,0,.3)}
-.pill-az{background:rgba(33,150,243,.07);border-color:rgba(33,150,243,.2);color:var(--azure);box-shadow:0 0 12px rgba(33,150,243,.15)}
 .pill-az:hover{transform:scale(1.05);box-shadow:0 0 20px rgba(33,150,243,.3)}
 .app-body{display:grid;grid-template-columns:320px 1fr;height:calc(100vh - 57px);position:relative;z-index:1;overflow:hidden}
 .sidebar{background:linear-gradient(180deg,var(--s1),rgba(8,11,22,.95));border-right:1px solid var(--br);display:flex;flex-direction:column;position:relative;overflow:hidden;backdrop-filter:blur(10px);height:100%}
@@ -196,6 +195,8 @@ html,body{width:100%;height:100vh;background:var(--bg);font-family:'Outfit',sans
 .dl-btn-bulk:hover{background:rgba(255,153,0,.25);box-shadow:0 4px 16px rgba(255,153,0,.3)}
 .dl-btn-rpt{background:rgba(255,107,157,.12);border:1px solid rgba(255,107,157,.25)!important;color:var(--pk)}
 .dl-btn-rpt:hover{background:rgba(255,107,157,.2);box-shadow:0 4px 16px rgba(255,107,157,.3)}
+.dl-btn-smc{background:rgba(108,99,255,.14);border:1px solid rgba(108,99,255,.3)!important;color:var(--i2)}
+.dl-btn-smc:hover{background:rgba(108,99,255,.24);box-shadow:0 4px 16px rgba(108,99,255,.3)}
 .dl-body{padding:10px 15px;display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .dl-stat{background:var(--s3);border:1px solid var(--br);border-radius:7px;padding:7px 9px;transition:transform .2s,box-shadow .2s}
 .dl-stat:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(108,99,255,.2)}
@@ -209,7 +210,7 @@ html,body{width:100%;height:100vh;background:var(--bg);font-family:'Outfit',sans
 .dl-footer{padding:6px 15px 9px;font-size:10px;color:var(--t4);font-family:'JetBrains Mono',monospace;border-top:1px solid var(--br);display:flex;gap:12px;flex-wrap:wrap}
 .cl-item{display:flex;align-items:center;gap:4px;color:var(--t2)}
 .cl-sw{width:11px;height:8px;border-radius:2px;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.3)}
-.metrics-strip{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.metrics-strip{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
 .mc{background:linear-gradient(135deg,var(--s2),var(--s3));border:1px solid var(--br);border-radius:9px;padding:10px 11px;transition:transform .2s,box-shadow .2s;box-shadow:0 2px 8px rgba(0,0,0,.2)}
 .mc:hover{transform:translateY(-3px) scale(1.02);box-shadow:0 6px 20px rgba(108,99,255,.2)}
 .mc-i{font-size:11px;margin-bottom:3px;opacity:.8;transition:opacity .2s}
@@ -309,7 +310,7 @@ html,body{width:100%;height:100vh;background:var(--bg);font-family:'Outfit',sans
 .run-meta{font-size:10px;color:var(--t3);font-family:'JetBrains Mono',monospace}
 .run-cost-right{text-align:right;flex-shrink:0}
 .run-aws{font-size:12px;font-weight:700;color:var(--aws);font-family:'JetBrains Mono',monospace}
-.run-az{font-size:10px;color:var(--azure);font-family:'JetBrains Mono',monospace}
+.run-az{font-size:10px;color:var(--t3);font-family:'JetBrains Mono',monospace}
 .run-dl-btns{display:flex;gap:5px;flex-shrink:0}
 .run-dl-btn{padding:5px 9px;border-radius:6px;font-size:10px;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .2s;text-decoration:none;display:flex;align-items:center;gap:4px;white-space:nowrap;border:1px solid}
 .btn-xlsx{background:rgba(0,229,160,.08);border-color:rgba(0,229,160,.2);color:var(--grn)}
@@ -318,6 +319,8 @@ html,body{width:100%;height:100vh;background:var(--bg);font-family:'Outfit',sans
 .btn-bulk:hover{background:rgba(255,153,0,.14);transform:translateY(-2px);box-shadow:0 4px 12px rgba(255,153,0,.3)}
 .btn-rpt{background:rgba(255,107,157,.07);border-color:rgba(255,107,157,.2);color:var(--pk)}
 .btn-rpt:hover{background:rgba(255,107,157,.14);transform:translateY(-2px);box-shadow:0 4px 12px rgba(255,107,157,.3)}
+.btn-smc{background:rgba(108,99,255,.08);border-color:rgba(108,99,255,.22);color:var(--i2)}
+.btn-smc:hover{background:rgba(108,99,255,.16);transform:translateY(-2px);box-shadow:0 4px 12px rgba(108,99,255,.3)}
 .run-del-btn{padding:5px 7px;border-radius:6px;background:rgba(255,68,68,.07);border:1px solid rgba(255,68,68,.18);color:var(--red);font-size:10px;cursor:pointer;transition:all .2s}
 .run-del-btn:hover{background:rgba(255,68,68,.2);transform:scale(1.05);box-shadow:0 4px 12px rgba(255,68,68,.4)}
 .pricing-badge{padding:2px 7px;border-radius:4px;font-size:9px;font-family:'JetBrains Mono',monospace;background:rgba(108,99,255,.1);border:1px solid rgba(108,99,255,.2);color:var(--i2);white-space:nowrap}
@@ -333,7 +336,7 @@ html,body{width:100%;height:100vh;background:var(--bg);font-family:'Outfit',sans
 <header class="hdr">
   <div style="display:flex;align-items:center;gap:10px">
     <div class="logo-box">CI</div>
-    <div><div class="hdr-title">Cloud Instance Optimizer</div><div class="hdr-sub">AWS EC2 · Azure VM · Cheapest-first matching · Real-time</div></div>
+    <div><div class="hdr-title">Cloud Instance Optimizer</div><div class="hdr-sub">AWS EC2 · Cheapest-first matching · Real-time</div></div>
   </div>
   <div style="display:flex;align-items:center;gap:10px">
     <div class="conn-badge">
@@ -341,7 +344,7 @@ html,body{width:100%;height:100vh;background:var(--bg);font-family:'Outfit',sans
       <div><div class="conn-lbl">Live</div><div class="conn-lat">localhost:5000</div></div>
     </div>
     <button onclick="resetToWelcome()" title="Start a new run" style="padding:5px 13px;background:rgba(108,99,255,.1);border:1px solid rgba(108,99,255,.25);border-radius:7px;color:var(--i2);font-family:Outfit,sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:.15s" onmouseover="this.style.background='rgba(108,99,255,.2)'" onmouseout="this.style.background='rgba(108,99,255,.1)'"><i class="fa-solid fa-house" style="font-size:10px;margin-right:5px"></i>New Run</button>
-    <span class="pill pill-aws">AWS EC2</span><span class="pill pill-az">Azure VM</span>
+    <span class="pill pill-aws">AWS EC2</span>
   </div>
 </header>
 
@@ -356,6 +359,14 @@ html,body{width:100%;height:100vh;background:var(--bg);font-family:'Outfit',sans
 
     <!-- CONFIG PANE -->
     <div class="sb-pane active" id="pane-config">
+      <!-- Platform toggle -->
+      <div class="sb-sec">
+        <div class="sec-hdr"><div class="sec-ico" style="background:rgba(108,99,255,.1);color:var(--i2)"><i class="fa-solid fa-cloud" style="font-size:10px"></i></div><span class="sec-lbl">Platform</span></div>
+        <div style="display:flex;gap:6px">
+          <button type="button" id="platformAwsBtn" onclick="setPlatform('aws')" style="flex:1;padding:8px;border-radius:7px;border:1px solid rgba(255,153,0,.4);background:rgba(255,153,0,.15);color:var(--aws);font-family:Outfit,sans-serif;font-size:12px;font-weight:700;cursor:pointer;transition:.15s"><i class="fa-brands fa-aws" style="margin-right:5px"></i>AWS</button>
+          <button type="button" id="platformAzureBtn" onclick="setPlatform('azure')" style="flex:1;padding:8px;border-radius:7px;border:1px solid var(--br);background:var(--s3);color:var(--t3);font-family:Outfit,sans-serif;font-size:12px;font-weight:700;cursor:pointer;transition:.15s"><i class="fa-brands fa-microsoft" style="margin-right:5px"></i>Azure</button>
+        </div>
+      </div>
       <!-- Client -->
       <div class="sb-sec">
         <div class="sec-hdr"><div class="sec-ico" style="background:rgba(255,107,157,.1);color:var(--pk)"><i class="fa-solid fa-building" style="font-size:10px"></i></div><span class="sec-lbl">Client</span></div>
@@ -365,17 +376,13 @@ html,body{width:100%;height:100vh;background:var(--bg);font-family:'Outfit',sans
         </div>
       </div>
       <!-- MongoDB -->
-      <div class="sb-sec">
+      <div class="sb-sec platform-aws">
         <div class="sec-hdr"><div class="sec-ico" style="background:rgba(0,229,195,.1);color:var(--tl)"><i class="fa-solid fa-database" style="font-size:10px"></i></div><span class="sec-lbl">MongoDB</span></div>
         <div class="fg"><label class="fl">URI</label><div class="fi-wrap"><input class="fi" id="mongoUri" value="mongodb://localhost:27017/"/><i class="fa-solid fa-link fi-ico"></i></div></div>
-        <div class="fi-row">
-          <div class="fg"><label class="fl">AWS DB</label><div class="fi-wrap"><input class="fi" id="awsDb" value="EC2"/><i class="fa-solid fa-folder fi-ico"></i></div></div>
-          <div class="fg"><label class="fl">Azure DB</label><div class="fi-wrap"><input class="fi" id="azureDb" value="Azure"/><i class="fa-solid fa-folder fi-ico"></i></div></div>
-        </div>
-        <div class="fg" style="margin-bottom:0"><label class="fl">Azure Collection</label><div class="fi-wrap"><input class="fi" id="azColl" value="virtual_machines"/><i class="fa-solid fa-table fi-ico"></i></div></div>
+        <div class="fg" style="margin-bottom:0"><label class="fl">AWS DB</label><div class="fi-wrap"><input class="fi" id="awsDb" value="EC2"/><i class="fa-solid fa-folder fi-ico"></i></div></div>
       </div>
       <!-- Region -->
-      <div class="sb-sec">
+      <div class="sb-sec platform-aws">
         <div class="sec-hdr"><div class="sec-ico" style="background:rgba(255,153,0,.1);color:var(--aws)"><i class="fa-solid fa-globe" style="font-size:10px"></i></div><span class="sec-lbl">AWS Region</span></div>
         <div class="fg">
           <label class="fl">Select AWS region (all regions supported)</label>
@@ -391,7 +398,7 @@ html,body{width:100%;height:100vh;background:var(--bg);font-family:'Outfit',sans
         <div class="fg" style="margin-bottom:0"><label class="fl">Query region (from selection above)</label><div id="activeRegionDisplay" style="background:var(--s3);border:1px solid var(--br);border-radius:6px;padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t3)">us-east-1 (default — select a region above)</div></div>
       </div>
       <!-- Load Region Pricing -->
-      <div class="sb-sec">
+      <div class="sb-sec platform-aws">
         <div class="sec-hdr"><div class="sec-ico" style="background:rgba(0,229,195,.1);color:var(--tl)"><i class="fa-solid fa-cloud-arrow-down" style="font-size:10px"></i></div><span class="sec-lbl">Load Region Pricing</span></div>
         <div style="font-size:10px;color:var(--t4);margin-bottom:7px;line-height:1.5">Missing pricing data for a region? Pull it directly from AWS's public price list into MongoDB. Takes a few minutes per region.</div>
         <div class="fi-wrap" style="margin-bottom:7px"><input class="fi" id="pricingRegionInput" placeholder="e.g. af-south-1"/><i class="fa-solid fa-globe fi-ico"></i></div>
@@ -402,23 +409,46 @@ html,body{width:100%;height:100vh;background:var(--bg);font-family:'Outfit',sans
         </div>
       </div>
       <!-- Calculation Mode -->
-      <div class="sb-sec">
+      <div class="sb-sec platform-aws">
         <div class="sec-hdr"><div class="sec-ico" style="background:rgba(0,229,195,.1);color:var(--tl)"><i class="fa-solid fa-diagram-project" style="font-size:10px"></i></div><span class="sec-lbl">Calculation Mode</span></div>
-        <div class="fg" style="margin-bottom:0">
+        <div class="fg">
           <label class="fl">Instance Sizing</label>
           <div class="fi-wrap">
-            <select class="fs" id="calcMode" onchange="updateCalcModePreview()">
-              <option value="like_to_like">Like-to-Like (exact vCPU/Memory match)</option>
-              <option value="optimized_n1">Optimized — N-1 (one size down)</option>
-              <option value="optimized_n2">Optimized — N-2 (two sizes down)</option>
-            </select>
+           <select class="fs" id="calcMode" onchange="updateCalcModePreview()">
+    <option value="like_to_like">
+        Like-to-Like (exact vCPU/Memory match)
+    </option>
+
+    <option value="optimized_n1">
+        Optimized — N-1 (one size down)
+    </option>
+
+    <option value="optimized_n2">
+        Optimized — N-2 (two sizes down)
+    </option>
+
+    <option value="utilization_based">
+        Utilization Based Auto Sizing
+    </option>
+</select>
+
             <i class="fa-solid fa-microchip fi-ico"></i>
+          </div>
+        </div>
+        <div class="fg" style="margin-bottom:0">
+          <label class="fl">Minimum Instance Generation</label>
+          <div class="fi-wrap">
+            <select class="fs" id="minGeneration" onchange="updateCalcModePreview()">
+              <option value="5">5th Gen and above (m5, c6i, r7a...)</option>
+              <option value="6">6th Gen and above (m6i, c7g, r6a...)</option>
+            </select>
+            <i class="fa-solid fa-layer-group fi-ico"></i>
           </div>
         </div>
         <div id="calcModePreview" style="font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--i2);padding:4px 0 0;opacity:.8">→ Cheapest instance ≥ source vCPU &amp; Memory</div>
       </div>
       <!-- Pricing Options -->
-      <div class="sb-sec">
+      <div class="sb-sec platform-aws">
         <div class="sec-hdr"><div class="sec-ico" style="background:rgba(255,153,0,.1);color:var(--aws)"><i class="fa-solid fa-tag" style="font-size:10px"></i></div><span class="sec-lbl">Pricing Option</span></div>
         <div class="fi-row">
           <div class="fg">
@@ -446,6 +476,62 @@ html,body{width:100%;height:100vh;background:var(--bg);font-family:'Outfit',sans
         </div>
         <div id="pricingPreview" style="font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--i2);padding:4px 0 0;opacity:.8"></div>
       </div>
+
+      <!-- Azure Mode -->
+      <div class="sb-sec platform-azure" style="display:none">
+        <div class="sec-hdr"><div class="sec-ico" style="background:rgba(0,120,212,.12);color:#0078d4"><i class="fa-brands fa-microsoft" style="font-size:10px"></i></div><span class="sec-lbl">Azure Input Mode</span></div>
+        <div class="fg" style="margin-bottom:0">
+          <label class="fl">File Type</label>
+          <div class="fi-wrap">
+            <select class="fs" id="azureMode" onchange="updateAzurePreview()">
+              <option value="rvtools">RVTools Export (vInfo tab)</option>
+              <option value="adhoc">Adhoc VM List (simplified columns)</option>
+            </select>
+            <i class="fa-solid fa-file-circle-question fi-ico"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- Azure RVTools Sizing -->
+      <div class="sb-sec platform-azure azure-rvtools" style="display:none">
+        <div class="sec-hdr"><div class="sec-ico" style="background:rgba(0,120,212,.12);color:#0078d4"><i class="fa-solid fa-ruler-combined" style="font-size:10px"></i></div><span class="sec-lbl">VM Sizing</span></div>
+        <div class="fg">
+          <label class="fl">Sizing Strategy</label>
+          <div class="fi-wrap">
+            <select class="fs" id="azureSizing" onchange="updateAzurePreview()">
+              <option value="like_for_like">Like-for-Like (exact match, no downsizing)</option>
+              <option value="downsize">N-1 Downsize (reduce oversized VMs)</option>
+            </select>
+            <i class="fa-solid fa-compress fi-ico"></i>
+          </div>
+        </div>
+        <div class="fi-row" id="azureDownsizeThresholds" style="display:none">
+          <div class="fg" style="margin-bottom:0"><label class="fl">CPU threshold</label><div class="fi-wrap"><input class="fi" id="azureDownsizeCpu" type="number" value="8"/><i class="fa-solid fa-microchip fi-ico"></i></div></div>
+          <div class="fg" style="margin-bottom:0"><label class="fl">Memory threshold (GiB)</label><div class="fi-wrap"><input class="fi" id="azureDownsizeMem" type="number" value="32"/><i class="fa-solid fa-memory fi-ico"></i></div></div>
+        </div>
+        <label style="display:flex;align-items:center;gap:7px;margin-top:9px;font-size:11px;color:var(--t2);cursor:pointer"><input type="checkbox" id="azurePreferHigherRam" style="accent-color:var(--i)"/>Prefer higher-RAM variants (skip low-memory "als")</label>
+        <label style="display:flex;align-items:center;gap:7px;margin-top:7px;font-size:11px;color:var(--t2);cursor:pointer"><input type="checkbox" id="azureBNonProdOnlyRvtools" style="accent-color:var(--i)"/>Restrict B-series to Non-Prod only</label>
+        <div id="azurePreview" style="font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--i2);padding:7px 0 0;opacity:.8"></div>
+      </div>
+
+      <!-- Azure Adhoc Pricing -->
+      <div class="sb-sec platform-azure azure-adhoc" style="display:none">
+        <div class="sec-hdr"><div class="sec-ico" style="background:rgba(0,120,212,.12);color:#0078d4"><i class="fa-solid fa-tag" style="font-size:10px"></i></div><span class="sec-lbl">Azure Pricing Model</span></div>
+        <div class="fg">
+          <label class="fl">Pricing Model</label>
+          <div class="fi-wrap">
+            <select class="fs" id="azurePricingModel">
+              <option value="byol">BYOL (Savings Plan) — Linux base rate</option>
+              <option value="li">License Included</option>
+              <option value="ri">3yr RI + Hybrid Benefit (cheapest)</option>
+            </select>
+            <i class="fa-solid fa-credit-card fi-ico"></i>
+          </div>
+        </div>
+        <label style="display:flex;align-items:center;gap:7px;margin-top:7px;font-size:11px;color:var(--t2);cursor:pointer"><input type="checkbox" id="azureIncludeSql" style="accent-color:var(--i)"/>Add SQL Standard license ($73/vCPU, min 4 cores)</label>
+        <label style="display:flex;align-items:center;gap:7px;margin-top:7px;font-size:11px;color:var(--t2);cursor:pointer"><input type="checkbox" id="azureBNonProdOnlyAdhoc" style="accent-color:var(--i)"/>Restrict B-series to Non-Prod only</label>
+      </div>
+
       <!-- File Upload -->
 
       <div class="sb-sec">
@@ -454,7 +540,7 @@ html,body{width:100%;height:100vh;background:var(--bg);font-family:'Outfit',sans
           <input type="file" id="fileInp" accept=".xlsx,.xls" onchange="uploadFile(this)"/>
           <div class="drop-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
           <div class="drop-main">Drop Excel or click to browse</div>
-          <div class="drop-sub">vCPU · Memory · OS · Tenancy · License · S/W</div>
+          <div class="drop-sub" id="dropSubHint">vCPU · Memory · OS · Tenancy · License · S/W</div>
         </div>
         <div class="file-status" id="fileStatus"></div>
         <button id="changeFileBtn" onclick="changeFile()" style="display:none;width:100%;margin-top:5px;padding:6px;background:rgba(108,99,255,.1);border:1px solid rgba(108,99,255,.25);border-radius:6px;color:var(--i2);font-family:Outfit,sans-serif;font-size:11px;cursor:pointer;transition:.15s" onmouseover="this.style.background='rgba(108,99,255,.2)'" onmouseout="this.style.background='rgba(108,99,255,.1)'"><i class="fa-solid fa-arrows-rotate" style="margin-right:4px;font-size:10px"></i>Change File</button>
@@ -480,7 +566,7 @@ html,body{width:100%;height:100vh;background:var(--bg);font-family:'Outfit',sans
   <div class="welcome-state" id="welcomeState">
     <div class="welcome-icon"><i class="fa-solid fa-cloud"></i></div>
     <div class="welcome-title">Cloud Instance Optimizer</div>
-    <div class="welcome-sub">Find the cheapest AWS EC2 + Azure VM instances. Outputs: color-coded XLSX, AWS Pricing Calculator bulk import, and a downloadable HTML dashboard report — all saved per client.</div>
+    <div class="welcome-sub">Find the cheapest AWS EC2 instances for your fleet. Outputs: color-coded XLSX, AWS Pricing Calculator bulk import, and a downloadable HTML dashboard report — all saved per client.</div>
     <div class="ws-grid">
       <div class="ws-card"><div class="ws-n">01</div><div class="ws-t">Enter Client Name</div><div class="ws-d">Track all runs per client</div></div>
       <div class="ws-card"><div class="ws-n">02</div><div class="ws-t">Select Pricing Plan</div><div class="ws-d">1yr/3yr · No/Partial/All Upfront</div></div>
@@ -503,7 +589,7 @@ html,body{width:100%;height:100vh;background:var(--bg);font-family:'Outfit',sans
       <div class="calc-steps">
         <div class="cstep" id="cst0"><div class="csi"><i class="fa-solid fa-plug"></i></div><div><div class="cs-lbl">Connect</div><div class="cs-val" id="cv0">—</div></div></div>
         <div class="cstep" id="cst1"><div class="csi"><i class="fa-solid fa-magnifying-glass"></i></div><div><div class="cs-lbl">AWS Query</div><div class="cs-val" id="cv1">—</div></div></div>
-        <div class="cstep" id="cst2"><div class="csi"><i class="fa-solid fa-cloud"></i></div><div><div class="cs-lbl">Azure Query</div><div class="cs-val" id="cv2">—</div></div></div>
+        <div class="cstep" id="cst2"><div class="csi"><i class="fa-solid fa-calculator"></i></div><div><div class="cs-lbl">Cost Calc</div><div class="cs-val" id="cv2">—</div></div></div>
         <div class="cstep" id="cst3"><div class="csi"><i class="fa-solid fa-file-arrow-down"></i></div><div><div class="cs-lbl">Output</div><div class="cs-val" id="cv3">—</div></div></div>
       </div>
       <div class="calc-log" id="calcLog"></div>
@@ -524,12 +610,13 @@ html,body{width:100%;height:100vh;background:var(--bg);font-family:'Outfit',sans
           <a class="dl-btn dl-btn-main" id="dlBtnXlsx" href="#" download><i class="fa-solid fa-download" style="font-size:11px"></i>Download XLSX</a>
           <a class="dl-btn dl-btn-bulk" id="dlBtnBulk" href="#" download><i class="fa-solid fa-file-import" style="font-size:11px"></i>Bulk Import</a>
           <a class="dl-btn dl-btn-rpt" id="dlBtnRpt" href="#" download><i class="fa-solid fa-chart-bar" style="font-size:11px"></i>HTML Report</a>
+          <a class="dl-btn dl-btn-smc" id="dlBtnSMC" href="#" download><i class="fa-solid fa-diagram-project" style="font-size:11px"></i>Download SMC</a>
         </div>
       </div>
       <div class="dl-body">
         <div class="dl-stat"><div class="dl-sv" style="color:var(--i)" id="dlRows">—</div><div class="dl-sl">Total Rows</div></div>
         <div class="dl-stat"><div class="dl-sv" style="color:var(--aws)" id="dlAwsPm">—</div><div class="dl-sl">AWS $/mo</div></div>
-        <div class="dl-stat"><div class="dl-sv" style="color:var(--azure)" id="dlAzPm">—</div><div class="dl-sl">Azure $/mo</div></div>
+        <div class="dl-stat"><div class="dl-sv" style="color:var(--sky)" id="dlAwsPy">—</div><div class="dl-sl">AWS $/yr</div></div>
         <div class="dl-stat"><div class="dl-sv" style="color:var(--am)" id="dlUpsized">—</div><div class="dl-sl">Upsized VMs</div></div>
       </div>
       <div id="groupHierarchyHint" style="margin:0 15px 10px;padding:9px 12px;background:rgba(255,153,0,.06);border:1px solid rgba(255,153,0,.2);border-radius:8px;display:none">
@@ -554,7 +641,7 @@ html,body{width:100%;height:100vh;background:var(--bg);font-family:'Outfit',sans
       </div>
       <div class="dl-cols">
         <span class="dct">vCPU</span><span class="dct">Memory</span><span class="dct">Operating System</span><span class="dct">Production Servers</span><span class="dct">Tenancy</span><span class="dct">License Model</span><span class="dct">Pre Installed S/W</span><span class="dct">VM</span><span class="dct">Group</span>
-        <span class="dct new">AWS Recommended vCPU</span><span class="dct new">AWS Recommended Memory</span><span class="dct new">AWS Recommended Instance Type</span><span class="dct new">Instance Family</span><span class="dct new">Downsized</span><span class="dct new">Upsized</span><span class="dct new">PricePerHour</span><span class="dct new">PricePerMonth</span><span class="dct new">PricePerYear</span><span class="dct new">Azure Instance Type</span><span class="dct new">Azure Pay as you go per hour</span><span class="dct new">Azure 1 yr Savings per hour</span><span class="dct new">Azure 3 yr Savings per hour</span>
+        <span class="dct new">AWS Recommended vCPU</span><span class="dct new">AWS Recommended Memory</span><span class="dct new">AWS Recommended Instance Type</span><span class="dct new">Instance Family</span><span class="dct new">Downsized</span><span class="dct new">Upsized</span><span class="dct new">PricePerHour</span><span class="dct new">PricePerMonth</span><span class="dct new">PricePerYear</span>
       </div>
       <div class="dl-footer">
         <span class="cl-item"><span class="cl-sw" style="background:#C6EFCE"></span>Green = Downsized (memory reduced)</span>
@@ -567,17 +654,18 @@ html,body{width:100%;height:100vh;background:var(--bg);font-family:'Outfit',sans
     <div class="metrics-strip">
       <div class="mc"><div class="mc-i" style="color:var(--i)"><i class="fa-solid fa-server"></i></div><div class="mc-val" style="color:var(--i)" id="mv1">—</div><div class="mc-lbl">Total VMs</div><div class="mc-sub" id="ms1"></div></div>
       <div class="mc"><div class="mc-i" style="color:var(--grn)"><i class="fa-solid fa-shield-check"></i></div><div class="mc-val" style="color:var(--grn)" id="mv2">—</div><div class="mc-lbl">Production</div><div class="mc-sub" id="ms2"></div></div>
-      <div class="mc"><div class="mc-i" style="color:var(--azure)"><i class="fa-solid fa-database"></i></div><div class="mc-val" style="color:var(--azure)" id="mv3">—</div><div class="mc-lbl">SQL Servers</div><div class="mc-sub" id="ms3"></div></div>
+      <div class="mc"><div class="mc-i" style="color:var(--sky)"><i class="fa-solid fa-database"></i></div><div class="mc-val" style="color:var(--sky)" id="mv3">—</div><div class="mc-lbl">SQL Servers</div><div class="mc-sub" id="ms3"></div></div>
       <div class="mc"><div class="mc-i" style="color:var(--aws)"><i class="fa-brands fa-aws"></i></div><div class="mc-val" style="color:var(--aws)" id="mv4">—</div><div class="mc-lbl">AWS $/mo</div><div class="mc-sub" id="ms4"></div></div>
-      <div class="mc"><div class="mc-i" style="color:var(--azure)"><i class="fa-solid fa-cloud"></i></div><div class="mc-val" style="color:var(--azure)" id="mv5">—</div><div class="mc-lbl">Azure $/mo</div><div class="mc-sub">3yr savings</div></div>
-      <div class="mc"><div class="mc-i" style="color:var(--grn)"><i class="fa-solid fa-piggy-bank"></i></div><div class="mc-val" style="color:var(--grn)" id="mv6">—</div><div class="mc-lbl">Saves/mo</div><div class="mc-sub">Azure vs AWS</div></div>
+      <div class="mc"><div class="mc-i" style="color:var(--i2)"><i class="fa-solid fa-sack-dollar"></i></div><div class="mc-val" style="color:var(--i2)" id="mv5">—</div><div class="mc-lbl">Avg $/VM/mo</div><div class="mc-sub">per instance</div></div>
+      <div class="mc"><div class="mc-i" style="color:var(--grn)"><i class="fa-solid fa-arrow-down-wide-short"></i></div><div class="mc-val" style="color:var(--grn)" id="mv6">—</div><div class="mc-lbl">Downsized</div><div class="mc-sub">vs source specs</div></div>
+      <div class="mc"><div class="mc-i" style="color:var(--pk)"><i class="fa-solid fa-diagram-project"></i></div><div class="mc-val" style="color:var(--pk)" id="mv7">—</div><div class="mc-lbl">SMC Services</div><div class="mc-sub">discovered</div></div>
     </div>
 
     <!-- Summary band -->
     <div class="sum-band">
       <div class="sb-c sb-aws"><div class="sb-lbl" style="color:var(--aws)">AWS Total $/yr</div><div class="sb-val" style="color:var(--aws)" id="sbAws">—</div><div class="sb-note" id="sbAwsN"></div></div>
-      <div class="sb-c sb-az"><div class="sb-lbl" style="color:var(--azure)">Azure Total $/yr</div><div class="sb-val" style="color:var(--azure)" id="sbAz">—</div><div class="sb-note">3yr savings plan</div></div>
-      <div class="sb-c sb-save"><div class="sb-lbl" style="color:var(--grn)">Azure saves/yr</div><div class="sb-val" style="color:var(--grn)" id="sbSave">—</div><div class="sb-note" id="sbSaveN"></div></div>
+      <div class="sb-c sb-az"><div class="sb-lbl" style="color:var(--i2)">Avg Cost / VM / yr</div><div class="sb-val" style="color:var(--i2)" id="sbAz">—</div><div class="sb-note">across the fleet</div></div>
+      <div class="sb-c sb-save"><div class="sb-lbl" style="color:var(--grn)">Downsized VMs</div><div class="sb-val" style="color:var(--grn)" id="sbSave">—</div><div class="sb-note" id="sbSaveN"></div></div>
       <div class="sb-c sb-yl"><div class="sb-lbl" style="color:var(--am)">Upsized VMs</div><div class="sb-val" style="color:var(--am)" id="sbUp">—</div><div class="sb-note">vCPU or mem rounded up</div></div>
     </div>
 
@@ -590,7 +678,7 @@ html,body{width:100%;height:100vh;background:var(--bg);font-family:'Outfit',sans
     <!-- Donuts -->
     <div class="dash3">
       <div class="panel"><div class="p-hdr"><div class="p-title"><span class="p-dot" style="background:var(--grn)"></span>Production Split</div></div><div class="p-body"><div class="donut-wrap"><div class="donut-c"><canvas id="prodChart" role="img" aria-label="Prod donut"></canvas></div><div class="dleg" id="prodLeg"></div></div></div></div>
-      <div class="panel"><div class="p-hdr"><div class="p-title"><span class="p-dot" style="background:var(--azure)"></span>SQL Edition Mix</div></div><div class="p-body"><div class="donut-wrap"><div class="donut-c"><canvas id="sqlChart" role="img" aria-label="SQL donut"></canvas></div><div class="dleg" id="sqlLeg"></div></div></div></div>
+      <div class="panel"><div class="p-hdr"><div class="p-title"><span class="p-dot" style="background:var(--sky)"></span>SQL Edition Mix</div></div><div class="p-body"><div class="donut-wrap"><div class="donut-c"><canvas id="sqlChart" role="img" aria-label="SQL donut"></canvas></div><div class="dleg" id="sqlLeg"></div></div></div></div>
       <div class="panel"><div class="p-hdr"><div class="p-title"><span class="p-dot" style="background:var(--pk)"></span>OS Distribution</div></div><div class="p-body"><div class="donut-wrap"><div class="donut-c"><canvas id="osChart" role="img" aria-label="OS donut"></canvas></div><div class="dleg" id="osLeg"></div></div></div></div>
     </div>
 
@@ -620,7 +708,7 @@ html,body{width:100%;height:100vh;background:var(--bg);font-family:'Outfit',sans
 
     <!-- Cost charts -->
     <div class="dash2">
-      <div class="panel"><div class="p-hdr"><div class="p-title"><span class="p-dot" style="background:var(--aws)"></span>AWS vs Azure — Monthly Cost</div></div><div class="p-body" style="padding-bottom:12px"><div style="position:relative;height:150px"><canvas id="costChart" role="img" aria-label="Cost chart"></canvas></div></div></div>
+      <div class="panel"><div class="p-hdr"><div class="p-title"><span class="p-dot" style="background:var(--aws)"></span>AWS Monthly Cost — On-Demand vs Selected Plan</div></div><div class="p-body" style="padding-bottom:12px"><div style="position:relative;height:150px"><canvas id="costChart" role="img" aria-label="Cost chart"></canvas></div></div></div>
       <div class="panel"><div class="p-hdr"><div class="p-title"><span class="p-dot" style="background:var(--yl)"></span>Instances by Family</div></div><div class="p-body" style="padding-bottom:12px"><div style="position:relative;height:150px"><canvas id="famCostChart" role="img" aria-label="Family chart"></canvas></div></div></div>
     </div>
 
@@ -701,12 +789,13 @@ document.addEventListener('click',e=>{if(!document.getElementById('rWrap').conta
 // CALCULATION MODE
 function updateCalcModePreview() {
   const mode = document.getElementById('calcMode').value;
+  const gen  = document.getElementById('minGeneration').value;
   const previews = {
     'like_to_like': '→ Cheapest instance ≥ source vCPU &amp; Memory (no downsizing)',
     'optimized_n1': '→ Downsizes once (vCPU÷2 if ≥8, Memory÷2 if ≥16), then cheapest match',
     'optimized_n2': '→ Downsizes twice — more aggressive right-sizing, then cheapest match',
   };
-  document.getElementById('calcModePreview').innerHTML = previews[mode] || '';
+  document.getElementById('calcModePreview').innerHTML = (previews[mode] || '') + ' · ' + gen + 'th gen+ preferred';
 }
 updateCalcModePreview();
 
@@ -750,7 +839,7 @@ function showTab(name,el){
       document.getElementById('progArea').style.display='none';
       document.getElementById('dashArea').classList.remove('hidden');
       document.getElementById('dlPanel').style.display='';
-      renderDash(ownResult.summary, ownResult.clientId, ownResult.runId, ownResult.filename, ownResult.bulkFn, ownResult.reportFn);
+      renderDash(ownResult.summary, ownResult.clientId, ownResult.runId, ownResult.filename, ownResult.bulkFn, ownResult.reportFn, ownResult.smcFn);
     } else {
       resetToWelcome();
     }
@@ -759,18 +848,60 @@ function showTab(name,el){
 
 // FILE UPLOAD
 let uploadedFileId=null;
+// PLATFORM TOGGLE
+let currentPlatform = 'aws';
+function setPlatform(p){
+  currentPlatform = p;
+  const awsBtn = document.getElementById('platformAwsBtn');
+  const azBtn  = document.getElementById('platformAzureBtn');
+  document.querySelectorAll('.platform-aws').forEach(el=>el.style.display = p==='aws' ? '' : 'none');
+  document.querySelectorAll('.platform-azure').forEach(el=>el.style.display = p==='azure' ? '' : 'none');
+  if(p==='aws'){
+    awsBtn.style.background='rgba(255,153,0,.15)'; awsBtn.style.borderColor='rgba(255,153,0,.4)'; awsBtn.style.color='var(--aws)';
+    azBtn.style.background='var(--s3)'; azBtn.style.borderColor='var(--br)'; azBtn.style.color='var(--t3)';
+    document.getElementById('dropSubHint').textContent='vCPU · Memory · OS · Tenancy · License · S/W';
+  } else {
+    azBtn.style.background='rgba(0,120,212,.15)'; azBtn.style.borderColor='rgba(0,120,212,.4)'; azBtn.style.color='#0078d4';
+    awsBtn.style.background='var(--s3)'; awsBtn.style.borderColor='var(--br)'; awsBtn.style.color='var(--t3)';
+    document.getElementById('dropSubHint').textContent='RVTools export (vInfo tab) or adhoc VM list';
+    updateAzurePreview();
+  }
+  // Switching platform invalidates any already-uploaded file (different parsers/validation)
+  changeFileSilent();
+}
+function changeFileSilent(){
+  uploadedFileId=null;
+  document.getElementById('fileStatus').style.display='none';
+  document.getElementById('dropZ').style.borderColor='';
+  document.getElementById('dropZ').classList.remove('file-ok');
+  document.getElementById('changeFileBtn').style.display='none';
+}
+function updateAzurePreview(){
+  const mode = document.getElementById('azureMode').value;
+  document.querySelectorAll('.azure-rvtools').forEach(el=>el.style.display = mode==='rvtools' ? '' : 'none');
+  document.querySelectorAll('.azure-adhoc').forEach(el=>el.style.display = mode==='adhoc' ? '' : 'none');
+  if(mode==='rvtools'){
+    const sizing = document.getElementById('azureSizing').value;
+    document.getElementById('azureDownsizeThresholds').style.display = sizing==='downsize' ? 'flex' : 'none';
+    const preview = sizing==='downsize'
+      ? '→ VMs above CPU/MEM threshold get downsized one tier before SKU mapping'
+      : '→ Maps 1:1 to the cheapest Azure SKU meeting source CPU + memory exactly';
+    document.getElementById('azurePreview').textContent = preview;
+  }
+}
+
 async function uploadFile(inp){
   const f=inp.files[0];if(!f)return;
   const st=document.getElementById('fileStatus');
   const dz=document.getElementById('dropZ');
   st.className='file-status file-ok';st.style.display='block';st.textContent='Uploading...';
-  const fd=new FormData();fd.append('file',f);
+  const fd=new FormData();fd.append('file',f);fd.append('platform',currentPlatform);
   try{
     const res=await fetch('/api/upload',{method:'POST',body:fd});
     const d=await res.json();
     if(d.error){st.className='file-status file-err';st.textContent='Error: '+d.error;uploadedFileId=null;return;}
     uploadedFileId=d.file_id;
-    st.textContent='OK  '+f.name+' - '+d.rows+' rows';
+    st.textContent='OK  '+f.name+(d.rows!=null?' - '+d.rows+' rows':' - '+(d.columns?d.columns.length:0)+' sheets');
     dz.style.borderColor='var(--grn)';
     dz.classList.add('file-ok');
     document.getElementById('changeFileBtn').style.display='block';
@@ -836,20 +967,39 @@ function startRun(){
   document.getElementById('calcLog').innerHTML='';
   for(let i=0;i<4;i++){document.getElementById('cst'+i).classList.remove('active','done');document.getElementById('cv'+i).textContent='—';}
   document.getElementById('calcFill').style.width='0%';
+
+  if(currentPlatform==='azure'){
+    const azureMode = document.getElementById('azureMode').value;
+    const payload = { client_name:cn, file_id:uploadedFileId, azure_mode:azureMode };
+    if(azureMode==='rvtools'){
+      const sizing = document.getElementById('azureSizing').value;
+      payload.like_for_like = (sizing !== 'downsize');
+      payload.downsize_cpu = parseInt(document.getElementById('azureDownsizeCpu').value || 8);
+      payload.downsize_mem = parseInt(document.getElementById('azureDownsizeMem').value || 32);
+      payload.prefer_higher_ram = document.getElementById('azurePreferHigherRam').checked;
+      payload.b_nonprod_only = document.getElementById('azureBNonProdOnlyRvtools').checked;
+    } else {
+      payload.pricing_model = document.getElementById('azurePricingModel').value;
+      payload.include_sql = document.getElementById('azureIncludeSql').checked;
+      payload.b_nonprod_only = document.getElementById('azureBNonProdOnlyAdhoc').checked;
+    }
+    socket.emit('start_azure_run', payload);
+    return;
+  }
+
   socket.emit('start_run',{
     client_name:cn,file_id:uploadedFileId,
     mongo_uri:document.getElementById('mongoUri').value,
     aws_db:document.getElementById('awsDb').value,
     aws_collection:getActiveRegion(),
-    azure_db:document.getElementById('azureDb').value,
-    azure_collection:document.getElementById('azColl').value,
     purchase_key:selectedPricing,
     calc_mode:document.getElementById('calcMode').value,
+    min_generation:document.getElementById('minGeneration').value,
   });
 }
 
 // SOCKET
-const SMAP={'Connecting':0,'Connected':0,'Reading':1,'File':1,'Classifying':1,'AWS':1,'Row':1,'Azure':2,'Cost':3,'Writing':3,'Bulk':3,'HTML':3,'Summary':3,'Complete':3};
+const SMAP={'Connecting':0,'Connected':0,'Reading':1,'File':1,'Classifying':1,'AWS':1,'Row':1,'Cost':2,'Writing':3,'Bulk':3,'HTML':3,'Summary':3,'Complete':3};
 socket.on('progress',d=>{
   document.getElementById('calcFill').style.width=d.pct+'%';
   document.getElementById('calcPct').textContent=Math.round(d.pct)+'%';
@@ -877,8 +1027,8 @@ socket.on('run_complete',d=>{
   document.getElementById('dashArea').classList.remove('hidden');
   document.getElementById('dlPanel').style.display='';
   viewMode='own_result';
-  ownResult={summary:d.summary,clientId:d.client_id,runId:d.run_id,filename:d.filename,bulkFn:d.bulk_filename,reportFn:d.report_filename};
-  renderDash(d.summary,d.client_id,d.run_id,d.filename,d.bulk_filename,d.report_filename);
+  ownResult={summary:d.summary,clientId:d.client_id,runId:d.run_id,filename:d.filename,bulkFn:d.bulk_filename,reportFn:d.report_filename,smcFn:d.smc_filename};
+  renderDash(d.summary,d.client_id,d.run_id,d.filename,d.bulk_filename,d.report_filename,d.smc_filename);
   loadClients();
 });
 
@@ -917,20 +1067,24 @@ function donut(id,labels,data,colors,legId){
 }
 
 // RENDER DASHBOARD
-function renderDash(s,clientId,runId,filename,bulkFn,reportFn){
+function renderDash(s,clientId,runId,filename,bulkFn,reportFn,smcFn){
   const n=s.total_rows;
   document.getElementById('dlFilename').textContent=filename;
   const cmLabel={'like_to_like':'LIKE-TO-LIKE','optimized_n1':'OPTIMIZED N-1','optimized_n2':'OPTIMIZED N-2'}[s.calc_mode]||'';
-  document.getElementById('dlMeta').textContent=n+' rows - 20+ cols - '+s.purchase_key.replace(/_/g,' ').toUpperCase()+(cmLabel?' - '+cmLabel:'');
+  const genLabel=s.min_generation?(s.min_generation+'TH GEN+'):'';
+  document.getElementById('dlMeta').textContent=n+' rows - 20+ cols - '+s.purchase_key.replace(/_/g,' ').toUpperCase()+(cmLabel?' - '+cmLabel:'')+(genLabel?' - '+genLabel:'');
   document.getElementById('dlBtnXlsx').href='/api/clients/'+clientId+'/runs/'+runId+'/download';
   document.getElementById('dlBtnXlsx').download=filename;
-  document.getElementById('dlBtnBulk').href='/api/clients/'+clientId+'/runs/'+runId+'/download_bulk';
-  document.getElementById('dlBtnBulk').download=bulkFn||'bulk_import.xlsx';
-  document.getElementById('dlBtnRpt').href='/api/clients/'+clientId+'/runs/'+runId+'/download_report';
-  document.getElementById('dlBtnRpt').download=reportFn||'report.html';
+  const bulkBtn=document.getElementById('dlBtnBulk'), rptBtn=document.getElementById('dlBtnRpt'), smcBtn=document.getElementById('dlBtnSMC');
+  if(bulkFn){ bulkBtn.style.display=''; bulkBtn.href='/api/clients/'+clientId+'/runs/'+runId+'/download_bulk'; bulkBtn.download=bulkFn; }
+  else { bulkBtn.style.display='none'; }
+  if(reportFn){ rptBtn.style.display=''; rptBtn.href='/api/clients/'+clientId+'/runs/'+runId+'/download_report'; rptBtn.download=reportFn; }
+  else { rptBtn.style.display='none'; }
+  if(smcFn){ smcBtn.style.display=''; smcBtn.href='/api/clients/'+clientId+'/runs/'+runId+'/download_smc'; smcBtn.download=smcFn; }
+  else { smcBtn.style.display='none'; }
   document.getElementById('dlRows').textContent=n;
   document.getElementById('dlAwsPm').textContent=fmt(s.total_aws_pm);
-  document.getElementById('dlAzPm').textContent=fmt(s.total_azure_3yr_pm);
+  document.getElementById('dlAwsPy').textContent=fmt(s.total_aws_py);
   document.getElementById('dlUpsized').textContent=s.upsized_count;
   if(s.suggested_top_group){
     document.getElementById('groupHierarchyHint').style.display='block';
@@ -939,6 +1093,9 @@ function renderDash(s,clientId,runId,filename,bulkFn,reportFn){
   } else {
     document.getElementById('groupHierarchyHint').style.display='none';
   }
+  const downsizedCount = s.downsized_count || 0;
+  const avgPerVmMo = n > 0 ? (s.total_aws_pm || 0) / n : 0;
+  const avgPerVmYr = n > 0 ? (s.total_aws_py || 0) / n : 0;
   document.getElementById('mv1').textContent=n;
   document.getElementById('mv2').textContent=s.prod_count;
   document.getElementById('ms2').textContent=Math.round(s.prod_count/n*100)+'% of fleet';
@@ -946,14 +1103,15 @@ function renderDash(s,clientId,runId,filename,bulkFn,reportFn){
   document.getElementById('ms3').textContent=Object.entries(s.sql_breakdown||{}).map(([k,v])=>v+' '+k).join(' - ')||'None';
   document.getElementById('mv4').textContent=fmt(s.total_aws_pm);
   document.getElementById('ms4').textContent=(s.purchase_key||'').replace(/_/g,' ');
-  document.getElementById('mv5').textContent=fmt(s.total_azure_3yr_pm);
-  document.getElementById('mv6').textContent=fmt(s.azure_saves_pm);
+  document.getElementById('mv5').textContent=fmt(avgPerVmMo);
+  document.getElementById('mv6').textContent=downsizedCount;
+  document.getElementById('mv7').textContent=s.smc_service_count!=null?s.smc_service_count:'—';
   document.getElementById('sbAws').textContent=fmt(s.total_aws_py);
   document.getElementById('sbAwsN').textContent=n+' instances';
-  document.getElementById('sbAz').textContent=fmt((s.total_azure_3yr_pm||0)*12);
-  document.getElementById('sbSave').textContent=fmt((s.azure_saves_pm||0)*12);
-  const sp=s.total_aws_pm>0?Math.round(s.azure_saves_pm/s.total_aws_pm*100):0;
-  document.getElementById('sbSaveN').textContent=sp+'% cheaper than AWS';
+  document.getElementById('sbAz').textContent=fmt(avgPerVmYr);
+  document.getElementById('sbSave').textContent=downsizedCount;
+  const dp=n>0?Math.round(downsizedCount/n*100):0;
+  document.getElementById('sbSaveN').textContent=dp+'% of fleet right-sized down';
   document.getElementById('sbUp').textContent=s.upsized_count+'/'+n;
   document.getElementById('tcSV').textContent=(s.src_vcpu_total||0).toLocaleString();
   document.getElementById('tcTV').textContent=(s.tgt_vcpu_total||0).toLocaleString();
@@ -990,7 +1148,8 @@ function renderDash(s,clientId,runId,filename,bulkFn,reportFn){
   const gl=document.getElementById('grpList');gl.innerHTML='';
   Object.entries(grp).sort((a,b)=>b[1].count-a[1].count).forEach(([g,v])=>{gl.innerHTML+='<div class="grp-row"><span class="grp-name">'+g+'</span><div class="grp-bar"><div class="grp-fill" style="width:'+Math.round(v.count/mxG*100)+'%"></div></div><span class="grp-cnt">'+v.count+'</span><span class="grp-cost">'+fmt(v.pm)+'/mo</span></div>';});
   const ex1=Chart.getChart(document.getElementById('costChart'));if(ex1)ex1.destroy();
-  new Chart(document.getElementById('costChart'),{type:'bar',data:{labels:['AWS/mo','Azure PAYG/mo','Azure 3yr/mo'],datasets:[{data:[s.total_aws_pm,s.total_aws_pm*1.4,s.total_azure_3yr_pm],backgroundColor:['rgba(255,153,0,.75)','rgba(33,150,243,.35)','rgba(33,150,243,.8)'],borderColor:['rgba(255,153,0,.9)','rgba(33,150,243,.5)','rgba(33,150,243,.95)'],borderWidth:1,borderRadius:4}]},options:{...co,scales:{...co.scales,y:{...co.scales.y,ticks:{...co.scales.y.ticks,callback:v=>'$'+(v/1000).toFixed(0)+'K'}}}}});
+  const estOnDemandPm = (s.total_aws_pm||0) * 1.4; // rough reference point — on-demand typically runs ~40% above a committed plan
+  new Chart(document.getElementById('costChart'),{type:'bar',data:{labels:['Est. On-Demand/mo','Selected Plan/mo'],datasets:[{data:[estOnDemandPm,s.total_aws_pm],backgroundColor:['rgba(255,153,0,.35)','rgba(255,153,0,.85)'],borderColor:['rgba(255,153,0,.5)','rgba(255,153,0,.95)'],borderWidth:1,borderRadius:4}]},options:{...co,scales:{...co.scales,y:{...co.scales.y,ticks:{...co.scales.y.ticks,callback:v=>'$'+(v/1000).toFixed(0)+'K'}}}}});
   const ex2=Chart.getChart(document.getElementById('famCostChart'));if(ex2)ex2.destroy();
   new Chart(document.getElementById('famCostChart'),{type:'bar',data:{labels:['Compute Opt.','General Purp.','Memory Opt.'],datasets:[{label:'Count',data:['Compute optimized','General purpose','Memory optimized'].map(f=>fb[f]||0),backgroundColor:['rgba(79,195,247,.7)','rgba(108,99,255,.7)','rgba(255,107,157,.7)'],borderColor:['rgba(79,195,247,.9)','rgba(108,99,255,.9)','rgba(255,107,157,.9)'],borderWidth:1,borderRadius:4}]},options:{...co}});
   renderClientHistory(clientId);
@@ -1029,7 +1188,7 @@ function showClientRuns(client){
       // Show all dashboard panels with data from latest run
       document.getElementById('dlPanel').style.display='';
       renderDash(latestRun.summary, client.id, latestRun.id, latestRun.filename, 
-                 latestRun.bulk_filename, latestRun.report_filename);
+                 latestRun.bulk_filename, latestRun.report_filename, latestRun.smc_filename);
     }
   }
   
@@ -1050,23 +1209,26 @@ function renderClientHistory(clientId){
   if(!client.runs.length){list.innerHTML='<div style="padding:14px;font-size:11px;color:var(--t4)">No runs yet.</div>';return;}
   client.runs.forEach(run=>{
     const ts=new Date(run.timestamp).toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
-    const pm=run.summary&&run.summary.total_aws_pm;const az=run.summary&&run.summary.total_azure_3yr_pm;
+    const pm=run.summary&&run.summary.total_aws_pm;const py=run.summary&&run.summary.total_aws_py;
     const pk=(run.purchase_key||run.summary?.purchase_key||'—').replace(/_/g,' ');
     const cmMap={'like_to_like':'Like-to-Like','optimized_n1':'Optimized N-1','optimized_n2':'Optimized N-2'};
     const cm=cmMap[run.calc_mode||run.summary?.calc_mode]||'';
+    const genPref=run.min_generation||run.summary?.min_generation;
+    const genBadge=genPref?(genPref+'th Gen+'):'';
     const displayName = run.label ? run.label : run.filename;
     const el=document.createElement('div');el.className='run-item';
     el.innerHTML=
       '<div class="run-left">'+
         '<div class="run-filename"><i class="fa-solid fa-file-excel" style="color:var(--grn);margin-right:4px;font-size:10px"></i>'+displayName+(run.label?' <span style="color:var(--t4);font-size:9px">('+run.filename+')</span>':'')+'</div>'+
         '<div class="run-meta">'+ts+' &nbsp;&middot;&nbsp; '+run.input_rows+' VMs &nbsp;&middot;&nbsp; '+run.collection+'</div>'+
-        '<div style="margin-top:3px;display:flex;gap:5px"><span class="pricing-badge">'+pk+'</span>'+(cm?'<span class="pricing-badge" style="background:rgba(0,229,195,.1);border-color:rgba(0,229,195,.2);color:var(--tl)">'+cm+'</span>':'')+'</div>'+
+        '<div style="margin-top:3px;display:flex;gap:5px"><span class="pricing-badge">'+pk+'</span>'+(cm?'<span class="pricing-badge" style="background:rgba(0,229,195,.1);border-color:rgba(0,229,195,.2);color:var(--tl)">'+cm+'</span>':'')+(genBadge?'<span class="pricing-badge" style="background:rgba(79,195,247,.1);border-color:rgba(79,195,247,.2);color:var(--sky)">'+genBadge+'</span>':'')+'</div>'+
       '</div>'+
-      '<div class="run-cost-right">'+(pm?'<div class="run-aws">'+fmt(pm)+'/mo</div><div class="run-az">Azure: '+fmt(az||0)+'/mo</div>':'')+' </div>'+
+      '<div class="run-cost-right">'+(pm?'<div class="run-aws">'+fmt(pm)+'/mo</div><div class="run-az">'+fmt(py||0)+'/yr</div>':'')+' </div>'+
       '<div class="run-dl-btns">'+
         '<a class="run-dl-btn btn-xlsx" href="/api/clients/'+client.id+'/runs/'+run.id+'/download" download="'+run.filename+'"><i class="fa-solid fa-file-excel" style="font-size:10px"></i>XLSX</a>'+
         (run.bulk_path?'<a class="run-dl-btn btn-bulk" href="/api/clients/'+client.id+'/runs/'+run.id+'/download_bulk" download="'+(run.bulk_filename||'bulk.xlsx')+'"><i class="fa-solid fa-file-import" style="font-size:10px"></i>Bulk</a>':'')+
         (run.report_path?'<a class="run-dl-btn btn-rpt" href="/api/clients/'+client.id+'/runs/'+run.id+'/download_report" download="'+(run.report_filename||'report.html')+'"><i class="fa-solid fa-chart-bar" style="font-size:10px"></i>Report</a>':'')+
+        (run.smc_path?'<a class="run-dl-btn btn-smc" href="/api/clients/'+client.id+'/runs/'+run.id+'/download_smc" download="'+(run.smc_filename||'SMC.xlsx')+'"><i class="fa-solid fa-diagram-project" style="font-size:10px"></i>SMC</a>':'')+
       '</div>'+
       '<button class="run-del-btn" style="background:rgba(108,99,255,.08);border-color:rgba(108,99,255,.2);color:var(--i2)" onclick="editRun(\''+client.id+'\',\''+run.id+'\',\''+displayName.replace(/'/g,"\\'")+'\',event)" title="Rename this run"><i class="fa-solid fa-pen" style="font-size:10px"></i></button>'+
       '<button class="run-del-btn" onclick="deleteRun(\''+client.id+'\',\''+run.id+'\',event)" title="Delete this run"><i class="fa-solid fa-trash" style="font-size:10px"></i></button>';
@@ -1159,6 +1321,7 @@ function resetToWelcome() {
 
 buildRL('');
 resetToWelcome();
+setPlatform('aws');
 loadClients();
 </script>
 </body>
