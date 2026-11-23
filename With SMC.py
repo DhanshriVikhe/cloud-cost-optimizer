@@ -18,6 +18,10 @@ from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 import concurrent.futures
 
+# Azure pricing engine — self-contained, no MongoDB needed. Pricing database,
+# SKU sizing, OS/SQL/non-prod detection, and Excel generation all live here.
+import azure_engine
+
 try:
     import requests
 except ImportError:
@@ -481,42 +485,6 @@ def get_cheapest_aws_instance(collection, vcpu, memory, os_, tenancy, lic, sw,
     return _parse(winner, src_mem)
 
 
-def get_cheapest_azure_instance(azure_coll, vcpu, memory, os_, is_prod, purchase_key, cache=None):
-    az_os  = 'Ubuntu' if str(os_).lower() == 'linux' else os_
-    key = (int(vcpu), float(memory), az_os, is_prod, purchase_key)
-    if cache is not None and key in cache:
-        return cache[key]
-    # Map purchase key to Azure sort field
-    price_field = '3 yr Savings per hour'
-    if '1yr' in purchase_key:        price_field = '1 yr Savings per hour'
-    elif 'on_demand' in purchase_key: price_field = 'Pay as you go per hour'
-
-    filt = {'vCPU':{'$gte':vcpu}, 'OS':az_os}
-    if is_prod:
-        filt['Instance Type'] = {'$regex': r'^(?!B)(?!.*p.*s)(?!.*s.*p).*','$options':'i'}
-    pipe = [
-        {'$match': filt},
-        {'$match': {'Memory':{'$gte':memory}}},
-        {'$addFields': {'_sortPrice': {'$toDouble': f'${price_field}'}}},
-        {'$sort':  {'_sortPrice': 1}},
-        {'$limit': 1},
-        {'$project': {'Instance Type':1,'Pay as you go per hour':1,
-                       '1 yr Savings per hour':1,'3 yr Savings per hour':1,'_id':0}}
-    ]
-    try:
-        r = list(azure_coll.aggregate(pipe))
-    except Exception:
-        r = []
-    if r:
-        result = (r[0].get('Instance Type'), r[0].get('Pay as you go per hour'),
-                  r[0].get('1 yr Savings per hour'), r[0].get('3 yr Savings per hour'))
-    else:
-        result = (None,None,None,None)
-    if cache is not None:
-        cache[key] = result
-    return result
-
-
 # ══════════════════════════════════════════════════════════════════════════════
 # FAST CACHED LIKE-TO-LIKE / N-1 / N-2 LOGIC — mirrors the original proven script
 # ══════════════════════════════════════════════════════════════════════════════
@@ -532,47 +500,66 @@ def get_cheapest_azure_instance(azure_coll, vcpu, memory, os_, is_prod, purchase
 
 def _like_excl(is_prod):
     """
-    Precise exclusion regex — excludes a1 (old-gen) and Graviton-suffixed
-    families (m6g, c6gn, r6gd, im4gn, is4gen, etc.), plus burstable 't' for
-    production. Tighter than a blanket '.*g.*' match so it can never
-    accidentally exclude a legitimate cheap family that merely contains the
-    letter 'g' somewhere in its name.
+    Exclusion regex — rules out families that are never valid general-purpose
+    rehost targets, so the "cheapest" search only ever competes among
+    standard server instance types:
+      - a1          (old-gen, phased out)
+      - Graviton-suffixed families (m6g, c6gn, r6gd, im4gn, is4gen, etc.)
+      - p*/g*       (GPU compute/graphics — P3/P4/P5, G4/G5)
+      - vt*         (VT1 — dedicated video transcoding)
+      - f*          (F1 — FPGA)
+      - inf*/trn*   (Inferentia/Trainium — ML inference/training chips)
+      - dl*         (DL1 — deep learning)
+      - hpc*        (HPC6a/HPC7a — tightly-coupled HPC clusters)
+      - mac*        (Mac1/Mac2 — bare-metal macOS hardware)
+      - u-*         (High Memory bare metal, e.g. u-6tb1.metal)
+      - x*          (X1/X1e/X2 — extreme-memory, far pricier per vCPU)
+      - z1d         (high-frequency + NVMe, niche HPC/EDA workload)
+      - t*          (burstable — excluded for production only)
+    Tighter than a blanket '.*g.*' match so it can never accidentally
+    exclude a legitimate cheap family that merely contains the letter 'g'
+    somewhere in its name.
     """
-    graviton = r'^[a-z]+[0-9]+g[a-z]*\.'
-    old_gen  = r'^a[0-9]'
+    graviton    = r'^[a-z]+[0-9]+g[a-z]*\.'
+    old_gen     = r'^a[0-9]'
+    specialized = r'^(p[0-9]|g[0-9]|vt[0-9]|f[0-9]|inf[0-9]|trn[0-9]|dl[0-9]|hpc[0-9]|mac[0-9]|u-|x[0-9e]|z1d)'
     if is_prod:
-        return rf'{old_gen}|^t[0-9]|{graviton}'
-    return rf'{old_gen}|{graviton}'
+        return rf'{old_gen}|^t[0-9]|{graviton}|{specialized}'
+    return rf'{old_gen}|{graviton}|{specialized}'
+
+FLEX_REGEX = r'-flex\.'
 
 def cheapest_like_to_like_aws(collection, vcpu, memory, os_, tenancy, lic, sw,
-                               is_prod, lease, purchase, offering, cache):
+                               is_prod, lease, purchase, offering, cache, min_gen_pref=5):
     """
-    Fast query: cheapest instance where vCPU >= target and Memory >= target,
-    BUT bounded to a sane size window so it can never return an absurdly
-    oversized instance just because it happened to be the cheapest thing in
-    the DB that technically satisfies the floor (e.g. a 34 GiB requirement
-    should never resolve to a 128 GiB instance).
+    Cheapest instance where vCPU >= target and Memory >= target, bounded to a
+    sane size window so it can never return an absurdly oversized instance
+    just because it happened to be the cheapest thing in the DB that
+    technically satisfies the floor (e.g. a 34 GiB requirement should never
+    resolve to a 128 GiB instance). Specialized/GPU/graviton/old-gen families
+    and burstable-for-prod are already ruled out by _like_excl.
 
-    Generation preference: among instances that fit the sizing window,
-    prefer 7th-generation-or-newer families (m7i, c7g, r7a, etc.) since
-    they're current-gen and typically better price/performance. This is a
-    *preference*, not a hard requirement — it never causes oversizing or
-    downsizing on its own, it only changes which family is picked when a
-    same-size option exists in both an old and a new generation.
+    min_gen_pref is a HARD filter: whichever generation you select in the UI
+    (5th gen+ or 6th gen+) is enforced — only instances at or above that
+    generation are eligible. Within that filtered, bounded, excluded pool,
+    selection is simple: sort cheapest-first, take the first result.
 
     Fallback order (each tier only runs if the previous one found nothing):
-      1. Bounded size window + generation >= 7   (ideal case)
-      2. Bounded size window + any generation     (older-gen fallback)
-      3. Unbounded size + any generation           (last resort — sparse data)
+      1. Bounded size window + generation >= min_gen_pref   (expected case)
+      2. Unbounded size      + generation >= min_gen_pref   (sparse data at that size)
+      3. Bounded size window + any generation               (true last resort —
+         no instance of the requested generation exists for this spec at all)
+      4. Unbounded size      + any generation
 
-    Cached per unique parameter combination for speed across a whole fleet.
+    Cached per unique parameter combination (including the generation choice)
+    for speed across a whole fleet.
 
     CRITICAL: PricePerUnit is explicitly cast to a numeric type (PriceNumeric)
     before sorting. If it were sorted as a raw string, MongoDB would compare
     it lexicographically — e.g. "10.2" would sort BEFORE "9.5" because '1' < '9'
     — silently returning a more expensive instance as "cheapest".
     """
-    key = (int(vcpu), float(memory), os_, tenancy, lic, sw, is_prod, lease, purchase, offering)
+    key = (int(vcpu), float(memory), os_, tenancy, lic, sw, is_prod, lease, purchase, offering, min_gen_pref)
     if key in cache:
         return cache[key]
 
@@ -625,11 +612,13 @@ def cheapest_like_to_like_aws(collection, vcpu, memory, os_, tenancy, lic, sw,
         except Exception:
             return []
 
-    r = run(bounded=True, min_gen=7)      # 1. ideal: right-sized + current-gen
+    r = run(bounded=True,  min_gen=min_gen_pref)   # 1. expected case
     if not r:
-        r = run(bounded=True)             # 2. right-sized, any generation
+        r = run(bounded=False, min_gen=min_gen_pref)  # 2. sparse data at that size
     if not r:
-        r = run(bounded=False)            # 3. last resort — sparse pricing data
+        r = run(bounded=True)                          # 3. no instance of that gen exists for this spec
+    if not r:
+        r = run(bounded=False)                         # 4. absolute last resort
 
     result = _parse(r[0], mem_f) if r else (None, None, None, None, None, False, False)
     cache[key] = result
@@ -709,6 +698,31 @@ def map_os_for_bulk(os_str, sw_str):
     if is_win:   return "Windows Server"
     return "Linux"
 
+def sanitize_group_name(name):
+    """
+    AWS Pricing Calculator Bulk Import 'Group name' rules:
+      - Cannot contain '<', '>', or '&'
+      - Maximum 60 characters
+    This cleans any group/sub-group name so it's always accepted:
+      - '&' -> 'and ' (keeps meaning instead of just dropping it)
+      - '<' and '>' -> removed entirely
+      - Collapses extra whitespace left behind
+      - If over 60 chars, truncates at the last whole word that fits
+        (a clean "short form" instead of cutting mid-word), falling back
+        to a hard cut only if there's no space to break on.
+    """
+    name = str(name or '').strip()
+    name = name.replace('&', 'and ')
+    name = re.sub(r'[<>]', '', name)
+    name = re.sub(r'\s+', ' ', name).strip()
+    if len(name) > 60:
+        truncated = name[:60]
+        if ' ' in truncated:
+            truncated = truncated.rsplit(' ', 1)[0]
+        name = truncated.strip()
+    return name or 'Group'
+
+
 def lease_term_label(purchase_key):
     """Human label matching AWS Pricing Calculator group naming, e.g. '3 Year' / '1 Year' / 'On-Demand'."""
     if purchase_key == 'on_demand':
@@ -745,9 +759,9 @@ def generate_bulk_import(records, aws_insts, aws_region, purchase_key, out_path,
     #   └── ABC Corp Rehost ARR 3 Year
     #        └── 102 EC2 Servers
     ec2_count          = sum(1 for inst in aws_insts if inst)
-    ec2_group_name     = f"{ec2_count} EC2 Servers"
+    ec2_group_name     = sanitize_group_name(f"{ec2_count} EC2 Servers")
     lease_label        = lease_term_label(purchase_key)
-    suggested_top_group = f"{client_name} Rehost ARR {lease_label}" if client_name else None
+    suggested_top_group = sanitize_group_name(f"{client_name} Rehost ARR {lease_label}") if client_name else None
 
     # Clear existing data rows (keep rows 1-3: merged title row + header row)
     for row in ws.iter_rows(min_row=4, max_row=max(ws.max_row, 4)):
@@ -762,11 +776,12 @@ def generate_bulk_import(records, aws_insts, aws_region, purchase_key, out_path,
 
         # Group: read directly from the input file's "Group" column
         # (falls back to Resource Pool / Cluster if Group isn't present).
-        # The "<N> EC2 Servers" naming is only used for the AWS Pricing
-        # Calculator hint banner / sub-group suggestion, NOT written here.
-        group = str(
+        # Sanitized against AWS Bulk Import's rules: no '<', '>', '&', and
+        # max 60 characters — input files often have long/messy group names
+        # that would otherwise get silently rejected on upload.
+        group = sanitize_group_name(
             rec.get("Group") or rec.get("Resource Pool") or rec.get("Cluster") or ""
-        ).strip()
+        )
 
         # VM name from input file
         vm_name = str(
@@ -826,6 +841,93 @@ def generate_bulk_import(records, aws_insts, aws_region, purchase_key, out_path,
         'ec2_group_name': ec2_group_name,
         'suggested_top_group': suggested_top_group,
     }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# AWS SMC SERVICE DISCOVERY
+# ══════════════════════════════════════════════════════════════════════════════
+# Pure extension — does not touch pricing, sizing, or the existing XLSX
+# outputs. Reads the same raw input `records` already used elsewhere in the
+# pipeline and derives a list of AWS services the migration will actually
+# need, beyond just EC2 compute. This is the data model the future
+# Playwright/Selenium/REST-based SMC uploader will consume — each service is
+# a plain dict, so the whole list is already JSON-serializable as-is.
+
+def build_aws_smc_services(records):
+    """
+    Discover AWS services required for this migration from the raw input
+    records (same field names used throughout the AWS pipeline: 'Pre
+    Installed S/W', 'Production Servers').
+
+    Returns a list of dicts: {'Service Group', 'Service', 'Quantity',
+    'placeholder'} — conversion-ready for JSON (no custom objects, no
+    non-serializable fields).
+    """
+    total_vms  = len(records)
+    sql_count  = sum(1 for r in records if str(r.get('Pre Installed S/W', 'NA')).strip()
+                      not in ('NA', 'nan', 'None', ''))
+    prod_count = sum(1 for r in records if str(r.get('Production Servers', '')).strip().lower() == 'yes')
+
+    services = []
+
+    # Always created
+    services.append({'Service Group': 'Compute',      'Service': 'Amazon EC2', 'Quantity': total_vms, 'placeholder': False})
+    services.append({'Service Group': 'Monitoring',    'Service': 'CloudWatch', 'Quantity': total_vms, 'placeholder': False})
+    services.append({'Service Group': 'Backup & DR',   'Service': 'AWS Backup', 'Quantity': total_vms, 'placeholder': False})
+
+    # Conditional
+    if sql_count > 0:
+        services.append({'Service Group': 'Database', 'Service': 'Amazon RDS', 'Quantity': sql_count, 'placeholder': False})
+
+    if prod_count > 5:
+        services.append({'Service Group': 'Networking', 'Service': 'Application Load Balancer', 'Quantity': 1, 'placeholder': False})
+        services.append({'Service Group': 'Security',   'Service': 'AWS WAF',                     'Quantity': 1, 'placeholder': False})
+
+    # Future-ready placeholders — included in the model now (Quantity 0,
+    # flagged) so the uploader/discovery logic never has to change shape
+    # later when these become real, sized services.
+    services.append({'Service Group': 'Storage',    'Service': 'S3',             'Quantity': 0, 'placeholder': True})
+    services.append({'Service Group': 'Storage',    'Service': 'EBS',            'Quantity': 0, 'placeholder': True})
+    services.append({'Service Group': 'Networking', 'Service': 'Direct Connect', 'Quantity': 0, 'placeholder': True})
+
+    return services
+
+
+def generate_smc_file(services, output_file):
+    """
+    Write a discovered-services list to an .xlsx workbook with a single
+    'SMC Services' tab — columns: Service Group | Service | Quantity.
+    `services` is the plain-dict list from build_aws_smc_services() (or
+    azure_engine.build_smc_services()) — this function is platform-agnostic.
+    Returns the number of services written.
+    """
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'SMC Services'
+
+    headers = ['Service Group', 'Service', 'Quantity']
+    ws.append(headers)
+    hdr_fill = PatternFill(start_color='1F3864', end_color='1F3864', fill_type='solid')
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color='FFFFFF', size=11)
+        cell.fill = hdr_fill
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+
+    placeholder_fill = PatternFill(start_color='F2F2F2', end_color='F2F2F2', fill_type='solid')
+    for svc in services:
+        row = [svc.get('Service Group', ''), svc.get('Service', ''), svc.get('Quantity', 0)]
+        ws.append(row)
+        if svc.get('placeholder'):
+            for cell in ws[ws.max_row]:
+                cell.fill = placeholder_fill
+                cell.font = Font(italic=True, color='808080')
+
+    for col in ws.columns:
+        length = max((len(str(c.value)) if c.value is not None else 0) for c in col)
+        ws.column_dimensions[col[0].column_letter].width = max(16, length + 4)
+
+    wb.save(str(output_file))
+    return len(services)
 
 
 def generate_html_report(client_name, run_id, summary, filename, timestamp, purchase_key):
@@ -904,8 +1006,6 @@ body{{font-family:system-ui,sans-serif;background:#05070f;color:#eef0ff;min-heig
   <div class="mc"><div class="mv" style="color:#00e5a0">{s.get('prod_count','—')}</div><div class="ml">Production</div></div>
   <div class="mc"><div class="mv" style="color:#2196f3">{s.get('sql_count','—')}</div><div class="ml">SQL Servers</div></div>
   <div class="mc"><div class="mv" style="color:#ff9900">{fmt(s.get('total_aws_pm'))}</div><div class="ml">AWS $/mo</div></div>
-  <div class="mc"><div class="mv" style="color:#2196f3">{fmt(s.get('total_azure_3yr_pm'))}</div><div class="ml">Azure $/mo</div></div>
-  <div class="mc"><div class="mv" style="color:#00e5a0">{fmt(s.get('azure_saves_pm'))}</div><div class="ml">Saves/mo</div></div>
 </div>
 
 <div class="band">
@@ -913,16 +1013,6 @@ body{{font-family:system-ui,sans-serif;background:#05070f;color:#eef0ff;min-heig
     <div class="bl" style="color:#ff9900">AWS Total $/yr</div>
     <div class="bv" style="color:#ff9900">{fmt(s.get('total_aws_py'))}</div>
     <div class="bn">{s.get('total_rows','—')} instances</div>
-  </div>
-  <div class="bc" style="background:rgba(33,150,243,.05);border-color:rgba(33,150,243,.18)">
-    <div class="bl" style="color:#2196f3">Azure Total $/yr</div>
-    <div class="bv" style="color:#2196f3">{fmt((s.get('total_azure_3yr_pm') or 0)*12)}</div>
-    <div class="bn">3yr savings plan</div>
-  </div>
-  <div class="bc" style="background:rgba(0,229,160,.05);border-color:rgba(0,229,160,.18)">
-    <div class="bl" style="color:#00e5a0">Azure saves/yr</div>
-    <div class="bv" style="color:#00e5a0">{fmt((s.get('azure_saves_pm') or 0)*12)}</div>
-    <div class="bn">{round((s.get('azure_saves_pm',0))/(s.get('total_aws_pm',1) or 1)*100)}% cheaper</div>
   </div>
   <div class="bc" style="background:rgba(255,179,71,.05);border-color:rgba(255,179,71,.18)">
     <div class="bl" style="color:#ffb347">Upsized VMs</div>
@@ -1060,6 +1150,18 @@ def download_run_bulk(client_id, run_id):
     if not path.exists(): abort(404, 'Bulk import file not found')
     return send_file(path, as_attachment=True, download_name=path.name)
 
+@app.route('/api/clients/<client_id>/runs/<run_id>/download_smc')
+def download_run_smc(client_id, run_id):
+    """Download the SMC service discovery workbook (AWS_SMC_*.xlsx or Azure_SMC_*.xlsx)."""
+    clients = load_clients()
+    client  = next((c for c in clients if c['id'] == client_id), None)
+    if not client: abort(404)
+    run = next((r for r in client['runs'] if r['id'] == run_id), None)
+    if not run: abort(404)
+    path = Path(run.get('smc_path',''))
+    if not path.exists(): abort(404, 'SMC workbook not found')
+    return send_file(path, as_attachment=True, download_name=path.name)
+
 @app.route('/api/clients/<client_id>/runs/<run_id>/delete', methods=['DELETE'])
 def delete_run(client_id, run_id):
     clients = load_clients()
@@ -1136,15 +1238,39 @@ def upload_file():
     f = request.files['file']
     if not f.filename.endswith(('.xlsx','.xls')):
         return jsonify({'error':'Only .xlsx/.xls accepted'}),400
-    uid  = str(uuid.uuid4())
-    path = UPLOAD_DIR / f'input_{uid}.xlsx'
+    uid      = str(uuid.uuid4())
+    path     = UPLOAD_DIR / f'input_{uid}.xlsx'
+    platform = (request.form.get('platform') or 'aws').strip().lower()
     f.save(path)
+
+    if platform == 'azure':
+        # Azure engine parses its own sheets (vInfo/In-Scope for RVTools, first
+        # matching sheet for Adhoc) and its own column layout — AWS's pandas
+        # column check doesn't apply here, just confirm the file opens.
+        try:
+            wb = load_workbook(path, read_only=True)
+            sheet_names = wb.sheetnames
+            wb.close()
+        except Exception as e:
+            return jsonify({'error': f'Cannot read file: {e}'}), 400
+        return jsonify({'file_id': uid, 'filename': f.filename,
+                        'rows': None, 'columns': sheet_names})
+
     try:
         df2 = pd.read_excel(path, engine='openpyxl', nrows=2)
     except Exception as e:
         return jsonify({'error':f'Cannot read file: {e}'}),400
-    required = {'vCPU','Memory','Operating System','Production Servers',
-                'Tenancy','License Model','Pre Installed S/W'}
+    required = {
+    'vCPU',
+    'Memory',
+    'CPU Utilization %',
+    'Memory Utilization %',
+    'Operating System',
+    'Production Servers',
+    'Tenancy',
+    'License Model',
+    'Pre Installed S/W'
+}
     missing  = required - set(df2.columns)
     if missing:
         return jsonify({'error':f'Missing columns: {", ".join(missing)}'}),400
@@ -1188,6 +1314,224 @@ def handle_load_pricing(data):
 
 
 # ── SocketIO: real-time optimizer run ─────────────────────────────────────────
+# ── SocketIO: Azure pricing run (RVTools / Adhoc) ─────────────────────────────
+@socketio.on('start_azure_run')
+def handle_start_azure_run(data):
+    """
+    Runs the Azure pricing engine (azure_engine.py) against an uploaded
+    RVTools export or adhoc VM list. No MongoDB involved — all pricing is
+    a self-contained lookup table inside azure_engine.
+
+    The summary dict is deliberately built with the SAME field names the
+    AWS pipeline uses (total_aws_pm, prod_count, os_breakdown, etc.) so the
+    existing dashboard/renderDash() JS works for Azure runs with zero changes.
+    'bulk_filename'/'report_filename' are left empty since Azure runs don't
+    produce an AWS Pricing Calculator bulk import or a separate HTML report —
+    the Azure Excel workbook already contains the Summary/VM Detail/etc. tabs.
+    """
+    sid = request.sid
+
+    def ep(pct, step, expr, log_msg, color='#8d97d4'):
+        socketio.emit('progress', {'pct': round(pct, 1), 'step': step, 'expr': expr,
+                                    'log': log_msg, 'color': color}, to=sid)
+    def ee(msg):
+        socketio.emit('run_error', {'message': msg}, to=sid)
+
+    def run():
+        try:
+            client_name = (data.get('client_name', '') or 'Unknown').strip()
+            file_id     = data.get('file_id', '')
+            azure_mode  = data.get('azure_mode', 'rvtools')   # 'rvtools' | 'adhoc'
+
+            # RVTools-specific flags
+            like_for_like    = bool(data.get('like_for_like', True))
+            downsize_cpu     = int(data.get('downsize_cpu', 8) or 8)
+            downsize_mem     = int(data.get('downsize_mem', 32) or 32)
+            prefer_higher_ram = bool(data.get('prefer_higher_ram', False))
+
+            # Adhoc-specific flags
+            pricing_model = data.get('pricing_model', 'byol')   # 'li' | 'byol' | 'ri'
+            include_sql   = bool(data.get('include_sql', False))
+
+            # Shared flag
+            b_nonprod_only = bool(data.get('b_nonprod_only', False))
+
+            input_path = UPLOAD_DIR / f'input_{file_id}.xlsx'
+            if not input_path.exists():
+                ee('Input file not found. Please re-upload.')
+                return
+
+            run_id      = str(uuid.uuid4())
+            ts          = datetime.now().strftime('%Y%m%d_%H%M%S')
+            safe_client = re.sub(r'[^\w\-]', '_', client_name)
+
+            if azure_mode == 'adhoc':
+                # ── Adhoc mode ──────────────────────────────────────────────
+                use_ri = (pricing_model == 'ri')
+                azure_engine.B_SERIES_ALL = not b_nonprod_only
+
+                ep(10, 'Reading file', f'parse_adhoc_file("input_{file_id}.xlsx")',
+                   'Reading adhoc VM list...', '#9b95ff')
+                vms = azure_engine.parse_adhoc_file(str(input_path))
+                total_rows = len(vms)
+                if total_rows == 0:
+                    ee('No VMs found in the uploaded file. Check the column layout.')
+                    return
+
+                ep(40, 'Pricing', f'{total_rows} VMs — model={pricing_model}',
+                   f'Pricing {total_rows} VMs ({pricing_model.upper()})...', '#ff9900')
+
+                pm = 'li' if pricing_model == 'li' else 'byol'
+                out_fn   = f'Azure_Pricing_{safe_client}_{ts}.xlsx'
+                out_path = OUTPUT_DIR / out_fn
+                azure_engine.generate_adhoc_excel(vms, str(out_path), pricing_mode=pm,
+                                                   include_sql=include_sql, use_ri=use_ri)
+
+                ep(80, 'Writing Excel', 'generate_adhoc_excel(...)',
+                   'Writing output XLSX...', '#ffb347')
+
+                ep(88, 'SMC discovery', 'azure_engine.build_smc_services(vms)',
+                   'Discovering required Azure services...', '#9b95ff')
+                smc_fn       = f'Azure_SMC_{safe_client}_{ts}.xlsx'
+                smc_path     = OUTPUT_DIR / smc_fn
+                smc_services = azure_engine.generate_smc_workbook(vms, str(smc_path))
+
+                # Build AWS-shaped summary from adhoc results
+                prod_count = sum(1 for v in vms if not v['is_nonprod'])
+                sql_count  = sum(1 for v in vms if v['is_sql'])
+                no_match   = sum(1 for v in vms if v.get('azure_sku') == 'NO MATCH')
+                # Use the 3yr tier as the headline monthly total (matches the
+                # "committed plan" framing used elsewhere in the dashboard)
+                total_pm   = sum(v.get('total_3yr', 0) for v in vms)
+                total_py = total_pm * 12
+                os_ctr   = Counter(v['os_type'] for v in vms)
+                fam_ctr  = Counter(v.get('azure_series', '') for v in vms if v.get('azure_series'))
+                pfx_ctr  = Counter((v.get('azure_sku') or '')[:3] for v in vms if v.get('azure_sku') and v.get('azure_sku') != 'NO MATCH')
+
+                summary = {
+                    'total_rows': total_rows, 'prod_count': prod_count,
+                    'nonprod_count': total_rows - prod_count, 'sql_count': sql_count,
+                    'upsized_count': 0, 'downsized_count': 0,
+                    'total_aws_pm': round(total_pm, 2), 'total_aws_py': round(total_py, 2),
+                    'src_vcpu_total': sum(int(v.get('source_cpus', 0) or 0) for v in vms),
+                    'src_mem_total': sum(float(v.get('source_mem_gib', 0) or 0) for v in vms),
+                    'tgt_vcpu_total': sum(int(v.get('azure_vcpus', 0) or 0) for v in vms),
+                    'tgt_mem_total': sum(float(v.get('azure_mem', 0) or 0) for v in vms),
+                    'fam_breakdown': dict(fam_ctr), 'prefix_breakdown': dict(pfx_ctr),
+                    'wf_breakdown': {}, 'os_breakdown': dict(os_ctr),
+                    'sql_breakdown': {'SQL Standard': sql_count} if sql_count else {},
+                    'group_breakdown': {'All VMs': {'count': total_rows, 'pm': round(total_pm, 2)}},
+                    'purchase_key': f'azure_{pricing_model}',
+                    'calc_mode': f'azure_adhoc_{pricing_model}',
+                    'platform': 'azure',
+                    'smc_service_count': len(smc_services),
+                }
+
+            else:
+                # ── RVTools mode ────────────────────────────────────────────
+                azure_engine.LIKE_FOR_LIKE = like_for_like
+                azure_engine.DOWNSIZE_CPU_THRESHOLD = downsize_cpu
+                azure_engine.DOWNSIZE_MEM_THRESHOLD = downsize_mem
+                azure_engine.PREFER_HIGHER_RAM = prefer_higher_ram
+                azure_engine.B_SERIES_ALL = not b_nonprod_only
+
+                ep(10, 'Reading file', f'parse_rvtools("input_{file_id}.xlsx")',
+                   'Reading RVTools export...', '#9b95ff')
+                all_vms = azure_engine.parse_rvtools(str(input_path))
+                desktop_vms = [v for v in all_vms if v.get('is_desktop', False)]
+                vms = [v for v in all_vms if not v.get('is_desktop', False)]
+                total_rows = len(vms)
+                if total_rows == 0:
+                    ee('No VMs to price after filtering (all powered-off/templates/desktop OS?).')
+                    return
+
+                ep(35, 'Pricing', f'{total_rows} VMs — sizing + SKU lookup',
+                   f'Pricing {total_rows} VMs...', '#ff9900')
+                for i, vm in enumerate(vms):
+                    azure_engine.price_vm(vm)
+                    if i % max(1, total_rows // 15) == 0:
+                        pct = 35 + (i / total_rows) * 40
+                        socketio.emit('progress', {
+                            'pct': round(pct, 1), 'step': 'Pricing',
+                            'expr': f'VM {i+1}/{total_rows}: {vm["vm_name"]}',
+                            'log': f'Priced {i+1}/{total_rows}', 'color': '#ff9900'
+                        }, to=sid)
+
+                ep(80, 'Writing Excel', 'generate_excel(...)',
+                   'Writing output XLSX...', '#ffb347')
+                out_fn   = f'Azure_Pricing_{safe_client}_{ts}.xlsx'
+                out_path = OUTPUT_DIR / out_fn
+                azure_engine.generate_excel(vms, str(out_path), desktop_vms=desktop_vms)
+
+                ep(88, 'SMC discovery', 'azure_engine.build_smc_services(vms)',
+                   'Discovering required Azure services...', '#9b95ff')
+                smc_fn       = f'Azure_SMC_{safe_client}_{ts}.xlsx'
+                smc_path     = OUTPUT_DIR / smc_fn
+                smc_services = azure_engine.generate_smc_workbook(vms, str(smc_path))
+
+                prod_count = sum(1 for v in vms if not v['is_nonprod'])
+                sql_count  = sum(1 for v in vms if v['is_sql'])
+                downsized  = sum(1 for v in vms if v.get('was_downsized'))
+                total_pm   = sum(v.get('compute_3yr_ri_byol', 0) + v.get('disk_monthly', 0) + v.get('sql_monthly', 0) for v in vms)
+                total_py   = total_pm * 12
+                os_ctr     = Counter(v['os_type'] for v in vms)
+                fam_ctr    = Counter(v.get('azure_series', '') for v in vms if v.get('azure_series'))
+                pfx_ctr    = Counter((v.get('azure_sku') or '').replace('Standard_', '')[:4] for v in vms if v.get('azure_sku') and v.get('azure_sku') != 'NO MATCH')
+                grp_ctr, grp_cost = {}, {}
+                for v in vms:
+                    g = v.get('folder') or v.get('cluster') or 'Unknown'
+                    grp_ctr[g]  = grp_ctr.get(g, 0) + 1
+                    grp_cost[g] = grp_cost.get(g, 0) + v.get('compute_3yr_ri_byol', 0)
+
+                summary = {
+                    'total_rows': total_rows, 'prod_count': prod_count,
+                    'nonprod_count': total_rows - prod_count, 'sql_count': sql_count,
+                    'upsized_count': 0, 'downsized_count': downsized,
+                    'total_aws_pm': round(total_pm, 2), 'total_aws_py': round(total_py, 2),
+                    'src_vcpu_total': sum(int(v.get('source_cpus', 0) or 0) for v in vms),
+                    'src_mem_total': sum(float(v.get('source_mem_gib', 0) or 0) for v in vms),
+                    'tgt_vcpu_total': sum(int(v.get('azure_vcpus', 0) or 0) for v in vms),
+                    'tgt_mem_total': sum(float(v.get('azure_mem_gib', 0) or 0) for v in vms),
+                    'fam_breakdown': dict(fam_ctr), 'prefix_breakdown': dict(pfx_ctr),
+                    'wf_breakdown': {}, 'os_breakdown': dict(os_ctr),
+                    'sql_breakdown': {'SQL Standard': sql_count} if sql_count else {},
+                    'group_breakdown': {g: {'count': grp_ctr[g], 'pm': round(grp_cost[g], 2)} for g in grp_ctr},
+                    'purchase_key': 'azure_3yr_ri_hybrid',
+                    'calc_mode': 'azure_like_to_like' if like_for_like else 'azure_n1',
+                    'platform': 'azure',
+                    'smc_service_count': len(smc_services),
+                }
+
+            run_meta = {
+                'id': run_id, 'timestamp': datetime.now().isoformat(),
+                'filename': out_fn, 'output_path': str(out_path),
+                'bulk_filename': None, 'bulk_path': None,
+                'report_filename': None, 'report_path': None,
+                'smc_filename': smc_fn, 'smc_path': str(smc_path),
+                'input_rows': total_rows, 'collection': f'Azure {azure_mode.upper()}',
+                'purchase_key': summary['purchase_key'], 'calc_mode': summary['calc_mode'],
+                'platform': 'azure', 'summary': summary,
+            }
+            client_rec = upsert_client_run(client_name, run_meta)
+
+            ep(100, 'Complete', f'✓ {out_fn} ready', f'Done — {total_rows} VMs priced', '#00e5a0')
+            time.sleep(0.05)
+
+            socketio.emit('run_complete', {
+                'client_id': client_rec['id'], 'client_name': client_name,
+                'run_id': run_id, 'filename': out_fn,
+                'smc_filename': smc_fn,
+                'bulk_filename': None, 'report_filename': None,
+                'summary': summary,
+            }, to=sid)
+
+        except Exception as e:
+            import traceback
+            ee(f'Unexpected error: {e}\n{traceback.format_exc()}')
+
+    threading.Thread(target=run, daemon=True).start()
+
+
 @socketio.on('start_run')
 def handle_start_run(data):
     sid = request.sid
@@ -1205,22 +1549,20 @@ def handle_start_run(data):
             mongo_uri       = data.get('mongo_uri','mongodb://localhost:27017/')
             aws_db_name     = data.get('aws_db','EC2')
             aws_coll_name   = data.get('aws_collection','us-east-1')
-            azure_db_name   = data.get('azure_db','Azure')
-            azure_coll_name = data.get('azure_collection','virtual_machines')
             purchase_key    = data.get('purchase_key','3yr_no_upfront')
             calc_mode       = data.get('calc_mode','like_to_like')   # like_to_like | optimized_n1 | optimized_n2
+            min_gen_pref    = int(data.get('min_generation', 5))     # 5 = "5th gen and above", 6 = "6th gen and above"
 
             lease, purchase, offering = PURCHASE_MAP.get(purchase_key, ('3yr','No Upfront','standard'))
 
-            # Per-run caches — collapse duplicate specs across the whole fleet into one query
-            aws_cache, azure_cache = {}, {}
+            # Per-run cache — collapse duplicate specs across the whole fleet into one query
+            aws_cache = {}
 
             # ── Step 1: Connect MongoDB ───────────────────────────────────────
             ep(2,'Connecting',f'MongoClient("{mongo_uri}")',f'Connecting to {mongo_uri}...','#00e5c3')
             try:
-                mc         = get_mongo(mongo_uri)
-                aws_coll   = mc[aws_db_name][aws_coll_name]
-                azure_coll = mc[azure_db_name][azure_coll_name]
+                mc       = get_mongo(mongo_uri)
+                aws_coll = mc[aws_db_name][aws_coll_name]
             except Exception as e:
                 ee(f'MongoDB connection failed: {str(e)[:200]}')
                 return
@@ -1239,7 +1581,7 @@ def handle_start_run(data):
                    f'data for "{aws_coll_name}" into MongoDB before running this region.')
                 return
 
-            ep(8,'Connected',f'EC2.{aws_coll_name} + Azure.{azure_coll_name}',
+            ep(8,'Connected',f'EC2.{aws_coll_name}',
                f'Connected — {aws_db_name}.{aws_coll_name} ({aws_doc_count:,} price records)','#00e5a0')
 
             # ── Step 2: Read input ────────────────────────────────────────────
@@ -1263,59 +1605,149 @@ def handle_start_run(data):
                f'Querying AWS for {total_rows} VMs ({calc_mode.replace("_"," ")})...','#ff9900')
 
             results_aws = {}
-            results_az  = {}
 
             def do_aws(args):
-                idx, row = args
-                vc  = int(row.get('vCPU',0) or 0)
-                mem = float(row.get('Memory',0) or 0)
-                os_ = str(row.get('Operating System','Linux'))
-                ten = str(row.get('Tenancy','Shared'))
-                lic = str(row.get('License Model','No License required'))
-                sw  = str(row.get('Pre Installed S/W','NA'))
-                ip  = str(row.get('Production Servers','')).strip().lower()=='yes'
-                tgt_vc, tgt_mem = resolve_target_dims(calc_mode, vc, mem)
-                res = cheapest_like_to_like_aws(aws_coll, tgt_vc, tgt_mem, os_, ten, lic, sw,
-                                                 ip, lease, purchase, offering, aws_cache)
-                if idx % max(1, total_rows//15) == 0:
-                    pct = 22 + (idx/total_rows)*34
-                    socketio.emit('progress',{
-                        'pct':round(pct,1),'step':'AWS Query',
-                        'expr':f'Row {idx+1}/{total_rows}: {tgt_vc}vCPU {tgt_mem}GiB {os_}',
-                        'log':f'AWS: {idx+1}/{total_rows} processed','color':'#ff9900'
-                    }, to=sid)
-                return idx, res
+        
+                  idx, row = args
 
-            def do_azure(args):
-                idx, row = args
-                vc  = int(row.get('vCPU',0) or 0)
-                mem = float(row.get('Memory',0) or 0)
-                os_ = str(row.get('Operating System','Linux'))
-                ip  = str(row.get('Production Servers','')).strip().lower()=='yes'
-                tgt_vc, tgt_mem = resolve_target_dims(calc_mode, vc, mem)
-                res = get_cheapest_azure_instance(azure_coll, tgt_vc, tgt_mem, os_, ip, purchase_key, azure_cache)
-                return idx, res
+                  vc  = int(row.get('vCPU',0) or 0)
+                  mem = float(row.get('Memory',0) or 0)
+ 
+                  os_ = str(row.get('Operating System','Linux'))
+                  ten = str(row.get('Tenancy','Shared'))
+                  lic = str(row.get('License Model','No License required'))
+                  sw  = str(row.get('Pre Installed S/W','NA'))
+
+                  ip = (
+                        str(
+                            row.get(
+                                'Production Servers',
+                                ''
+                            )
+                        ).strip().lower() == 'yes'
+                    )
+
+                    #
+                    # Utilization based sizing
+                    #
+            if calc_mode == "utilization_based":
+
+                        cpu_util = float(
+                            row.get(
+                                "CPU Utilization %",
+                                0
+                            ) or 0
+                        )
+
+                        mem_util = float(
+                            row.get(
+                                "Memory Utilization %",
+                                0
+                            ) or 0
+                        )
+
+                        #
+                        # CPU Mode
+                        #
+                        if cpu_util > 70:
+
+                            cpu_mode = "like_to_like"
+
+                        elif cpu_util <= 30:
+
+                            cpu_mode = "optimized_n2"
+
+                        else:
+
+                            cpu_mode = "optimized_n1"
+
+                        #
+                        # Memory Mode
+                        #
+                        if mem_util > 70:
+
+                            mem_mode = "like_to_like"
+
+                        elif mem_util <= 30:
+
+                            mem_mode = "optimized_n2"
+
+                        else:
+
+                            mem_mode = "optimized_n1"
+
+                        #
+                        # Reuse existing N-1/N-2 logic
+                        #
+                        cpu_target, _ = resolve_target_dims(
+                            cpu_mode,
+                            vc,
+                            mem
+                        )
+
+                        _, mem_target = resolve_target_dims(
+                            mem_mode,
+                            vc,
+                            mem
+                        )
+
+                        tgt_vc = cpu_target
+                        tgt_mem = mem_target
+
+            else:
+
+                        tgt_vc, tgt_mem = resolve_target_dims(
+                            calc_mode,
+                            vc,
+                            mem
+                        )
+
+            res = cheapest_like_to_like_aws(
+                        aws_coll,
+                        tgt_vc,
+                        tgt_mem,
+                        os_,
+                        ten,
+                        lic,
+                        sw,
+                        ip,
+                        lease,
+                        purchase,
+                        offering,
+                        aws_cache,
+                        min_gen_pref
+                    )
+
+            if idx % max(1, total_rows//15) == 0:
+
+                        pct = 22 + (idx/total_rows)*34
+
+                        socketio.emit(
+                            'progress',
+                            {
+                                'pct': round(pct,1),
+                                'step': 'AWS Query',
+                                'expr': f'Row {idx+1}/{total_rows}: {tgt_vc}vCPU {tgt_mem}GiB {os_}',
+                                'log': f'AWS: {idx+1}/{total_rows} processed',
+                                'color': '#ff9900'
+                            },
+                            to=sid
+                        )
+
+            return idx, res
 
             # Use ThreadPoolExecutor — mongo operations are I/O bound
             with concurrent.futures.ThreadPoolExecutor(max_workers=12) as ex:
                 for idx, res in ex.map(do_aws, enumerate(records)):
                     results_aws[idx] = res
 
-            ep(58,'Azure queries',
-               'aggregate([{$match:{vCPU:{$gte},Memory:{$gte}}},{$sort:savings_price},{$limit:1}])',
-               f'Querying Azure for {total_rows} VMs...','#2196f3')
-
-            with concurrent.futures.ThreadPoolExecutor(max_workers=12) as ex:
-                for idx, res in ex.map(do_azure, enumerate(records)):
-                    results_az[idx] = res
-
             # ── Step 4: Build columns ─────────────────────────────────────────
             ep(72,'Cost projections','PricePerMonth=PricePerHour×730 | Year=×8760',
                'Computing costs...','#00e5a0')
 
-            aws_vcpus, aws_mems, aws_insts, aws_fams, wf_list = [],[],[],[],[]
+            aws_vcpus, aws_mems, aws_insts, aws_fams, wf_list,   = [],[],[],[],[]
             ph_list, pm_list, py_list = [],[],[]
-            az_insts, az_payg, az1yr, az3yr = [],[],[],[]
+            sizing_decisions,cpu_utils,mem_utils = [],[],[]
             # Flag columns
             ds_flag, us_flag = [], []
 
@@ -1342,10 +1774,6 @@ def handle_start_run(data):
                 except Exception:
                     ds_flag.append('No'); us_flag.append('No')
 
-                zi,zp,z1,z3 = results_az.get(i) or (None,None,None,None)
-                az_insts.append(zi); az_payg.append(zp)
-                az1yr.append(z1);    az3yr.append(z3)
-
             df['AWS Recommended vCPU']          = aws_vcpus
             df['AWS Recommended Memory']         = aws_mems
             df['AWS Recommended Instance Type']  = aws_insts
@@ -1356,10 +1784,6 @@ def handle_start_run(data):
             df['PricePerHour']                   = ph_list
             df['PricePerMonth']                  = pm_list
             df['PricePerYear']                   = py_list
-            df['Azure Instance Type']            = az_insts
-            df['Azure Pay as you go per hour']   = az_payg
-            df['Azure 1 yr Savings per hour']    = az1yr
-            df['Azure 3 yr Savings per hour']    = az3yr
 
             # ── Step 5: Write output Excel ────────────────────────────────────
             ep(80,'Writing Excel','df.to_excel + openpyxl color coding',
@@ -1368,7 +1792,7 @@ def handle_start_run(data):
             run_id      = str(uuid.uuid4())
             ts          = datetime.now().strftime('%Y%m%d_%H%M%S')
             safe_client = re.sub(r'[^\w\-]','_', client_name)
-            out_fn      = f'AWS_Azure_{safe_client}_{ts}.xlsx'
+            out_fn      = f'AWS_Sizing_{safe_client}_{ts}.xlsx'
             out_path    = OUTPUT_DIR / out_fn
             df.to_excel(out_path, index=False)
 
@@ -1400,22 +1824,84 @@ def handle_start_run(data):
             # ── Step 6: Bulk import file ──────────────────────────────────────
             ep(86,'Bulk import','Generating AWS Pricing Calculator bulk import XLSX',
                'Building bulk import template...','#4fc3f7')
-            bulk_fn       = f'BulkImport_{safe_client}_{ts}.xlsx'
-            bulk_path     = OUTPUT_DIR / bulk_fn
-            bulk_info     = generate_bulk_import(records, aws_insts, aws_coll_name, purchase_key,
-                                                  bulk_path, client_name=client_name)
-            suggested_top_group = bulk_info['suggested_top_group']
-            ec2_group_name      = bulk_info['ec2_group_name']
+            if len(records) > 4000:
+    
+             bulk_files = []
+
+             for start_idx in range(
+                0,
+                len(records),
+                4000
+            ):
+
+              end_idx = start_idx + 4000
+
+        part_records = records[start_idx:end_idx]
+        part_aws     = aws_insts[start_idx:end_idx]
+
+        part_no = (start_idx // 4000) + 1
+
+        bulk_file_name = (
+            f"BulkImport_{safe_client}_{ts}_Part{part_no}.xlsx"
+        )
+
+        bulk_file_path = (
+            OUTPUT_DIR / bulk_file_name
+        )
+
+        bulk_info = generate_bulk_import(
+            part_records,
+            part_aws,
+            aws_coll_name,
+            purchase_key,
+            bulk_file_path,
+            client_name=client_name
+        )
+
+        bulk_files.append(
+            bulk_file_name
+        )
+
+        bulk_fn = ", ".join(bulk_files)
+        bulk_path = ""
+
+        suggested_top_group = bulk_info['suggested_top_group']
+        ec2_group_name      = bulk_info['ec2_group_name']
+        
+        else:
+
+    bulk_fn = f'BulkImport_{safe_client}_{ts}.xlsx'
+
+    bulk_path = OUTPUT_DIR / bulk_fn
+
+    bulk_info = generate_bulk_import(
+        records,
+        aws_insts,
+        aws_coll_name,
+        purchase_key,
+        bulk_path,
+        client_name=client_name
+    )
+
+    suggested_top_group = bulk_info['suggested_top_group']
+    ec2_group_name      = bulk_info['ec2_group_name']
+            # ── Step 6b: SMC service discovery workbook ───────────────────────
+            ep(89, 'SMC discovery', 'build_aws_smc_services(records)',
+               'Discovering required AWS services...', '#9b95ff')
+            smc_fn       = f'AWS_SMC_{safe_client}_{ts}.xlsx'
+            smc_path     = OUTPUT_DIR / smc_fn
+            smc_services = build_aws_smc_services(records)
+            generate_smc_file(smc_services, smc_path)
 
             # ── Step 7: Stats ─────────────────────────────────────────────────
             ep(92,'Summary stats','Aggregating fleet metrics','Computing dashboard stats...','#9b95ff')
             total_pm   = sum(v for v in pm_list if v)
             total_py   = sum(v for v in py_list if v)
-            total_az3  = sum(float(v)*730 for v in az3yr if v)
             prod_count = sum(1 for r in records if str(r.get('Production Servers','')).strip().lower()=='yes')
             sql_count  = sum(1 for r in records if str(r.get('Pre Installed S/W','NA')).strip()
                               not in ('NA','nan','None',''))
             upsized    = sum(1 for v in us_flag if v=='Yes')
+            downsized  = sum(1 for v in ds_flag if v=='Yes')
             fam_ctr    = Counter(f for f in aws_fams if f)
             pfx_ctr    = Counter(str(t or '').split('.')[0][:3] for t in aws_insts if t)
             wf_ctr     = Counter(wf_list)
@@ -1430,10 +1916,8 @@ def handle_start_run(data):
             summary = {
                 'total_rows': total_rows, 'prod_count': prod_count,
                 'nonprod_count': total_rows-prod_count, 'sql_count': sql_count,
-                'upsized_count': upsized,
+                'upsized_count': upsized, 'downsized_count': downsized,
                 'total_aws_pm': round(total_pm,2), 'total_aws_py': round(total_py,2),
-                'total_azure_3yr_pm': round(total_az3,2),
-                'azure_saves_pm': round(total_pm-total_az3,2),
                 'src_vcpu_total': sum(int(r.get('vCPU',0) or 0) for r in records),
                 'src_mem_total':  sum(float(r.get('Memory',0) or 0) for r in records),
                 'tgt_vcpu_total': sum(int(v) for v in aws_vcpus if v),
@@ -1444,8 +1928,10 @@ def handle_start_run(data):
                 'group_breakdown': {g:{'count':grp_ctr[g],'pm':round(grp_cost[g],2)} for g in grp_ctr},
                 'purchase_key': purchase_key,
                 'calc_mode': calc_mode,
+                'min_generation': min_gen_pref,
                 'suggested_top_group': suggested_top_group,
                 'ec2_group_name': ec2_group_name,
+                'smc_service_count': len(smc_services),
             }
 
             # ── Step 8: HTML report ───────────────────────────────────────────
@@ -1461,10 +1947,11 @@ def handle_start_run(data):
             run_meta = {
                 'id': run_id, 'timestamp': datetime.now().isoformat(),
                 'filename': out_fn, 'output_path': str(out_path),
-                'bulk_filename': bulk_fn, 'bulk_path': str(bulk_path),
+                'bulk_filename': bulk_fn,'bulk_path': str(bulk_path) if bulk_path else '',
                 'report_filename': report_fn, 'report_path': str(report_path),
+                'smc_filename': smc_fn, 'smc_path': str(smc_path),
                 'input_rows': total_rows, 'collection': aws_coll_name,
-                'purchase_key': purchase_key, 'calc_mode': calc_mode,
+                'purchase_key': purchase_key, 'calc_mode': calc_mode, 'min_generation': min_gen_pref,
                 'suggested_top_group': suggested_top_group, 'ec2_group_name': ec2_group_name,
                 'summary': summary,
             }
@@ -1474,10 +1961,16 @@ def handle_start_run(data):
             time.sleep(0.05)
 
             socketio.emit('run_complete',{
-                'client_id': client_rec['id'], 'client_name': client_name,
-                'run_id': run_id, 'filename': out_fn,
-                'bulk_filename': bulk_fn, 'report_filename': report_fn,
-                'suggested_top_group': suggested_top_group, 'ec2_group_name': ec2_group_name,
+                'client_id': client_rec['id'],
+                'client_name': client_name,
+                'run_id': run_id,
+                'filename': out_fn,
+                'smc_filename': smc_fn,
+                'bulk_filename': bulk_fn,
+                'bulk_files': bulk_files if len(records) > 4000 else [bulk_fn],
+                'report_filename': report_fn,
+                'suggested_top_group': suggested_top_group,
+                'ec2_group_name': ec2_group_name,
                 'summary': summary,
             }, to=sid)
 
