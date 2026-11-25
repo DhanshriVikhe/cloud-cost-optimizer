@@ -1164,6 +1164,492 @@ def download_run_bulk_part(client_id, run_id, part_no):
     if not path.exists(): abort(404, 'Bulk import part file not found on disk')
     return send_file(path, as_attachment=True, download_name=path.name)
 
+# ── AWS Calculator proxy — replaces server.js ────────────────────────────────
+@app.route('/api/proxy/saveas', methods=['POST'])
+def proxy_saveas():
+    """Proxy POST to AWS Calculator saveAs API with the required Origin/Referer headers."""
+    import urllib.request, urllib.error
+    body = request.get_data()
+    req = urllib.request.Request(
+        'https://dnd5zrqcec4or.cloudfront.net/Prod/v2/saveAs',
+        data=body,
+        headers={
+            'Content-Type':  'application/json',
+            'Origin':        'https://calculator.aws',
+            'Referer':       'https://calculator.aws/',
+            'User-Agent':    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36',
+            'Accept':        'application/json, text/plain, */*',
+        },
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = resp.read()
+            return app.response_class(data, status=resp.status, mimetype='application/json')
+    except urllib.error.HTTPError as e:
+        data = e.read()
+        return app.response_class(data, status=e.code, mimetype='application/json')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 502
+
+
+# ── AWS Calculator payload builder + estimate generator ───────────────────────
+import uuid as _uuid_mod
+
+EC2_REGION_NAMES = {
+    "us-east-1":"US East (N. Virginia)","us-east-2":"US East (Ohio)",
+    "us-west-1":"US West (N. California)","us-west-2":"US West (Oregon)",
+    "ca-central-1":"Canada (Central)","ca-west-1":"Canada West (Calgary)",
+    "sa-east-1":"South America (Sao Paulo)","eu-west-1":"Europe (Ireland)",
+    "eu-west-2":"Europe (London)","eu-west-3":"Europe (Paris)",
+    "eu-central-1":"Europe (Frankfurt)","eu-central-2":"Europe (Zurich)",
+    "eu-north-1":"Europe (Stockholm)","eu-south-1":"Europe (Milan)",
+    "eu-south-2":"Europe (Spain)","il-central-1":"Israel (Tel Aviv)",
+    "me-south-1":"Middle East (Bahrain)","me-central-1":"Middle East (UAE)",
+    "af-south-1":"Africa (Cape Town)","ap-south-1":"Asia Pacific (Mumbai)",
+    "ap-south-2":"Asia Pacific (Hyderabad)","ap-southeast-1":"Asia Pacific (Singapore)",
+    "ap-southeast-2":"Asia Pacific (Sydney)","ap-southeast-3":"Asia Pacific (Jakarta)",
+    "ap-southeast-4":"Asia Pacific (Melbourne)","ap-northeast-1":"Asia Pacific (Tokyo)",
+    "ap-northeast-2":"Asia Pacific (Seoul)","ap-northeast-3":"Asia Pacific (Osaka)",
+    "ap-east-1":"Asia Pacific (Hong Kong)",
+    "us-gov-east-1":"AWS GovCloud (US-East)","us-gov-west-1":"AWS GovCloud (US-West)",
+}
+
+EC2_TCO_RI_FACTOR = {
+    '1yr|No Upfront': 0.830,
+    '3yr|No Upfront': 0.630,
+}
+EC2_TCO_EBS_GB_MONTH_RATE = {
+    'gp3': 0.08, 'gp2': 0.10, 'io1': 0.125, 'io2': 0.125, 'st1': 0.045, 'sc1': 0.015,
+}
+EC2_TCO_FS_MONTHLY = 190.74
+
+
+def _calc_new_id(prefix):
+    return f"{prefix}-{str(_uuid_mod.uuid4())}"
+
+
+def _ev(value):
+    return {'value': str(value)}
+
+
+def _evu(value, unit):
+    return {'value': str(value), 'unit': unit}
+
+
+def _calc_region_name(code):
+    return EC2_REGION_NAMES.get(code, code)
+
+
+def _normalize_os(os_str):
+    s = str(os_str or '').strip().lower()
+    if 'windows' in s: return 'windows', 'Windows Server'
+    if 'rhel' in s or 'red hat' in s: return 'redhat', 'Red Hat Enterprise Linux'
+    if 'suse' in s: return 'suse', 'SUSE Linux Enterprise Server'
+    return 'linux', 'Linux'
+
+
+def _ebs_storage_type_label(ebs):
+    return {
+        'gp3': 'Storage General Purpose gp3 GB Mo',
+        'gp2': 'Storage General Purpose SSD gp2',
+        'io1': 'Storage Provisioned IOPS SSD io1',
+        'io2': 'Storage Provisioned IOPS SSD io2',
+        'st1': 'Storage Throughput Optimized HDD st1',
+        'sc1': 'Storage Cold HDD sc1',
+    }.get(str(ebs).lower(), 'Storage General Purpose gp3 GB Mo')
+
+
+def _build_ec2_service(inst, scenario_key, region, region_name):
+    """Build a single EC2 service payload dict (matches Concierto ec2BuildService)."""
+    quantity    = int(inst.get('quantity', 1) or 1)
+    ebs_type    = str(inst.get('ebs_type', 'gp3') or 'gp3').lower()
+    ebs_gb      = int(inst.get('ebs_gb', 100) or 100)
+    os_key, os_label = _normalize_os(inst.get('os', 'Linux'))
+    tenancy_raw = str(inst.get('tenancy', '') or '').lower()
+    tenancy_key = 'dedicated' if 'dedicated' in tenancy_raw else 'shared'
+    tenancy_label = 'Dedicated Instances' if tenancy_key == 'dedicated' else 'Shared Instances'
+    instance_type = str(inst.get('instance_type', 'm6i.large') or 'm6i.large')
+    hostname    = str(inst.get('hostname', '') or '')
+    storage_type_val = _ebs_storage_type_label(ebs_type)
+
+    if scenario_key == 'sp_1yr':
+        pricing_value = {'selectedOption': 'standard', 'term': '1 Year', 'upfrontPayment': 'None'}
+        pricing_label = 'Reserved - Standard, 1 Yr, No Upfront'
+    elif scenario_key == 'sp_3yr':
+        pricing_value = {'selectedOption': 'standard', 'term': '3 Year', 'upfrontPayment': 'None'}
+        pricing_label = 'Reserved - Standard, 3 Yr, No Upfront'
+    else:
+        pricing_value = {'selectedOption': 'on-demand', 'term': '1 year', 'utilizationValue': '100', 'utilizationUnit': '%Utilized/Month'}
+        pricing_label = 'On-Demand Utilization: 100 %Utilized/Month'
+
+    # Estimate monthly cost (no live pricing — use RI factor model)
+    od_rate = float(inst.get('od_price_per_hr', 0) or 0)
+    ebs_monthly = ebs_gb * EC2_TCO_EBS_GB_MONTH_RATE.get(ebs_type, 0.08)
+    if scenario_key == 'on_demand':
+        monthly = round(od_rate * 730 + ebs_monthly, 2)
+    else:
+        factor_key = '3yr|No Upfront' if scenario_key == 'sp_3yr' else '1yr|No Upfront'
+        monthly = round(od_rate * EC2_TCO_RI_FACTOR[factor_key] * 730 + ebs_monthly, 2)
+
+    return {
+        'serviceCode': 'ec2Enhancement',
+        'estimateFor': 'template',
+        'version': '0.0.68',
+        'region': region,
+        'regionName': region_name,
+        'serviceName': 'Amazon EC2',
+        'description': hostname,
+        'calculationComponents': {
+            'tenancy':                     {'value': tenancy_key},
+            'selectedOS':                  {'value': os_key},
+            'workloadSelection':           {'value': 'consistent'},
+            'workload':                    {'value': {'workloadType': 'consistent', 'data': str(quantity)}},
+            'instanceType':                {'value': instance_type},
+            'pricingStrategy':             {'value': pricing_value},
+            'ec2AdvancedPricingMetrics':   {'value': 1},
+            'snapshotFrequency':           {'value': '0'},
+            'storageType':                 {'value': storage_type_val},
+            'storageAmount':               _evu(str(ebs_gb), 'gb|NA'),
+            'detailedMonitoringCheckbox':  {'value': False},
+            'dataTransferForEC2':          {'value': [
+                {'entryType': 'INBOUND',      'value': '', 'unit': 'tb_month', 'fromRegion': ''},
+                {'entryType': 'OUTBOUND',     'value': '', 'unit': 'tb_month', 'toRegion': ''},
+                {'entryType': 'INTRA_REGION', 'value': '', 'unit': 'tb_month'},
+            ]},
+        },
+        'configSummary': (
+            f"Tenancy ({tenancy_label}), Operating system ({os_label}), "
+            f"Workload (Consistent, Number of instances: {quantity}), "
+            f"Advance EC2 instance ({instance_type}), Pricing strategy ({pricing_label}), "
+            f"Enable monitoring (disabled), EBS Storage amount ({ebs_gb} GB), "
+            f"DT Inbound: Not selected (0 TB per month), DT Outbound: Not selected (0 TB per month), "
+            f"DT Intra-Region: (0 TB per month)"
+        ),
+        'serviceCost': {'monthly': monthly, 'upfront': 0},
+    }
+
+
+def _build_foundational_services(region, region_name):
+    """Exact foundational services payload matching Concierto ec2BuildFoundationalServices."""
+    return {
+        _calc_new_id('awsConfig'): {
+            'serviceCode': 'awsConfig', 'region': region, 'estimateFor': 'awsConfig',
+            'version': '0.0.35', 'description': None, 'serviceName': 'AWS Config',
+            'regionName': region_name, 'serviceCost': {'monthly': 7.73},
+            'configSummary': 'Config items (2000), Rule evaluations (1700)',
+            'calculationComponents': {
+                'numberOfConfigrationItemsRecorded': _ev('2000'),
+                'numberOfAWSConfigRuleEvaluations':  _ev('1700'),
+                'numberOfConformancePackEvaluations': _ev('31'),
+            },
+        },
+        _calc_new_id('awsKeyManagementService'): {
+            'serviceCode': 'awsKeyManagementService', 'region': region, 'estimateFor': 'kms',
+            'version': '0.0.20', 'description': None, 'serviceName': 'AWS Key Management Service',
+            'regionName': region_name, 'serviceCost': {'monthly': 10.08},
+            'configSummary': 'CMKs (10), Symmetric requests (25218)',
+            'calculationComponents': {
+                'numberOfCmk': _ev('10'),
+                'numberOfSymmetricRequests': _ev('25218'),
+            },
+        },
+        _calc_new_id('amazonSimpleStorageServiceGroup'): {
+            'serviceCode': 'amazonSimpleStorageServiceGroup', 'region': region,
+            'description': None, 'serviceName': 'Amazon Simple Storage Service (S3)',
+            'regionName': region_name, 'serviceCost': {'monthly': 1.20, 'upfront': 0},
+            'configSummary': 'S3 Standard 10GB',
+            'subServices': [
+                {
+                    'serviceCode': 'amazonS3Standard', 'region': region,
+                    'estimateFor': 's3Standard', 'version': '0.0.71', 'description': None,
+                    'serviceCost': {'monthly': 1.20, 'upfront': 0},
+                    'calculationComponents': {
+                        'moveToStorageClassMethod': _ev('No movement required'),
+                        's3StandardStorageSize':    _evu('10', 'gb|month'),
+                        's3StandardPutRequests':    _ev('200000'),
+                        's3StandardGetRequests':    _ev('200000'),
+                        's3StandardDataReturnedSize': _evu('1', 'gb|month'),
+                        's3StandardDataScannedSize':  _evu('1', 'gb|month'),
+                    },
+                },
+                {
+                    'serviceCode': 'awsS3DataTransfer', 'region': region,
+                    'estimateFor': 'awsS3DataTransfer', 'version': '0.0.27', 'description': None,
+                    'serviceCost': {'monthly': 0},
+                    'calculationComponents': {
+                        'dataTransfer': {'value': [
+                            {'entryType': 'INBOUND',  'value': '', 'unit': 'tb_month', 'fromRegion': ''},
+                            {'entryType': 'OUTBOUND', 'value': '', 'unit': 'tb_month', 'toRegion': ''},
+                        ]},
+                    },
+                },
+            ],
+        },
+        _calc_new_id('awsSecurityHub'): {
+            'serviceCode': 'awsSecurityHub', 'region': region,
+            'estimateFor': 'template_securityhub', 'version': '0.0.51', 'description': None,
+            'serviceName': 'AWS Security Hub', 'regionName': region_name,
+            'serviceCost': {'monthly': 10.40}, 'configSummary': 'Accounts (2), Security Checks (5000)',
+            'calculationComponents': {
+                'noOfAccounts': _ev('2'), 'noOfSecurityChecks': _ev('5000'),
+                'noOfIngestion': _ev('100'), 'noOfautomationrules': _ev('100'), 'noOfcriteria': _ev('5'),
+            },
+        },
+        _calc_new_id('amazonRoute53'): {
+            'serviceCode': 'amazonRoute53', 'region': region, 'estimateFor': 'Route53',
+            'version': '0.0.88', 'description': None, 'serviceName': 'Amazon Route 53',
+            'regionName': region_name, 'serviceCost': {'monthly': 50.5},
+            'configSummary': 'Hosted Zones (1)',
+            'calculationComponents': {
+                'numberOfHostedZones': _ev('1'),
+                'numberOfPolicyRecordsForTrafficFlow': _ev('1'),
+                'numberOfBasicChecksWithinAWS': _ev('10'),
+            },
+        },
+        _calc_new_id('awsWebApplicationFirewall'): {
+            'serviceCode': 'awsWebApplicationFirewall', 'region': region, 'estimateFor': 'awsWaf',
+            'version': '0.0.34', 'description': None, 'serviceName': 'AWS Web Application Firewall (WAF)',
+            'regionName': region_name, 'serviceCost': {'monthly': 31.2},
+            'calculationComponents': {
+                'numberOfWebAcls':              _evu('2', 'perMonth'),
+                'numberOfRulesPerWebAcl':       _evu('2', 'perMonth'),
+                'numberOfRuleGroupsPerWebAcl':  _evu('2', 'perMonth'),
+                'numberOfRulesPerRuleGroup':    _evu('2', 'perMonth'),
+                'numberOfManangedRules':        _evu('2', 'perMonth'),
+                'numberOfWebRequests':          _evu('2', 'perMonth'),
+            },
+        },
+        _calc_new_id('elasticLoadBalancing'): {
+            'serviceCode': 'elasticLoadBalancing', 'region': region, 'description': None,
+            'serviceName': 'Elastic Load Balancing', 'regionName': region_name,
+            'serviceCost': {'monthly': 39.93}, 'configSummary': 'ALBs (1)',
+            'subServices': [{
+                'serviceCode': 'applicationLoadBalancer', 'region': region,
+                'estimateFor': 'template_0', 'version': '0.0.28', 'description': None,
+                'serviceCost': {'monthly': 39.93},
+                'calculationComponents': {
+                    'numberOfApplicationLoadBalancers': _ev('1'),
+                    'sizeOfBytesProcessedForLambdaFunctionTargets': _evu('1', 'gb|hour'),
+                    'sizeOfDataProcessedForEC2InstanceAndIPAddressTargets': _evu('1', 'gb|hour'),
+                    'averageNumberOfNewConnectionsPerALB': _evu('100', 'perSecond'),
+                    'averageConnectionDuration': _evu('100', 'sec'),
+                    'averageNumberOfRequestsPerALBPerSecond': _ev('1000'),
+                    'averageNumberOfRuleEvaluationsPerRequest': _ev('1'),
+                },
+            }],
+        },
+        _calc_new_id('awsCloudTrail'): {
+            'serviceCode': 'awsCloudTrail', 'region': region, 'estimateFor': 'template',
+            'version': '0.0.42', 'description': None, 'serviceName': 'AWS CloudTrail',
+            'regionName': region_name, 'serviceCost': {'monthly': 0}, 'configSummary': 'Write trails (1)',
+            'calculationComponents': {
+                'OpsMult': _ev('1000000'), 'numberOfWriteTrails': _ev('1'), 'numberOfReadTrails': _ev('1'),
+                'dataOpsMult': _ev('1000000'), 'numberOfS3Trails': _ev('1'), 'numberOfLambdaTrails': _ev('1'),
+                'eventMult': _ev('1000000'), 'numberOfInsightTrails': _ev('1'),
+                'numberOfWriteEvents': _evu('5', 'perMonth'), 'numberOfReadEvents': _evu('3', 'perMonth'),
+                'numberOfWMEvents': _evu('1', 'perMonth'),
+            },
+        },
+        _calc_new_id('amazonVirtualPrivateCloud'): {
+            'serviceCode': 'amazonVirtualPrivateCloud', 'region': region, 'description': None,
+            'serviceName': 'Amazon Virtual Private Cloud (VPC)', 'regionName': region_name,
+            'serviceCost': {'monthly': 39.70}, 'configSummary': 'VPN (1), NAT (1)',
+            'subServices': [
+                {
+                    'serviceCode': 'vpnConnectionVpc', 'region': region,
+                    'estimateFor': 'VPNConnection', 'version': '0.0.19', 'description': None,
+                    'serviceCost': {'monthly': 3.04},
+                    'calculationComponents': {
+                        'averageDurationForEachConnection': _evu('2', 'perDay'),
+                        'vpnConnection_numberOfWorkDays': _ev('22'),
+                        'vpnConnection_clientAvgDuration': _evu('10', 'perDay'),
+                        'numberOfSiteToSiteVPNConnections': _ev('1'),
+                    },
+                },
+                {
+                    'serviceCode': 'networkAddressTranslationNatGatewayVpc', 'region': region,
+                    'estimateFor': 'networkAddressTranslationGateway', 'version': '0.0.18',
+                    'description': None, 'serviceCost': {'monthly': 36.66},
+                    'calculationComponents': {
+                        'numberOfGateways': _ev('1'),
+                        'dataProcessedPerNATGateway': _evu('1', 'gb|month'),
+                        'regionalNatGatewayCount': _ev('5'),
+                        'regionalNatGatewayAzCount': _ev('3'),
+                        'regionalNatGatewayDataProcessed': _evu('0', 'gb|month'),
+                    },
+                },
+            ],
+        },
+    }
+
+
+def _build_calculator_payload(estimate_name, scenario_key, region, instances, include_fs=True):
+    """Build the full AWS Calculator saveAs payload for one scenario."""
+    region_name = _calc_region_name(region)
+    grouped = {}
+    for inst in instances:
+        app_name = str(inst.get('app_name') or inst.get('Group') or 'Rehost').strip()
+        app_name = app_name.replace('&', ' ').replace('<', ' ').replace('>', ' ').strip() or 'Rehost'
+        grouped.setdefault(app_name, []).append(inst)
+
+    plan_name = {
+        'on_demand': 'Plan (On-Demand)',
+        'sp_1yr':    'Plan (1 Year No Upfront)',
+        'sp_3yr':    'Plan (3 Year No Upfront)',
+    }.get(scenario_key, 'Plan (On-Demand)')
+
+    app_groups = {}
+    plan_monthly = 0.0
+    for app_name, items in grouped.items():
+        services = {}
+        group_monthly = 0.0
+        for inst in items:
+            svc = _build_ec2_service(inst, scenario_key, region, region_name)
+            services[_calc_new_id('ec2Enhancement')] = svc
+            group_monthly += float(svc['serviceCost']['monthly'] or 0)
+        plan_monthly += group_monthly
+        app_groups[_calc_new_id('EC2Group')] = {
+            'name': app_name,
+            'services': services,
+            'groups': {},
+            'groupSubtotal': {'monthly': round(group_monthly, 2), 'upfront': 0},
+            'totalCost':     {'monthly': round(group_monthly, 2), 'upfront': 0},
+        }
+
+    top_groups = {
+        _calc_new_id('PlanGroup'): {
+            'name': plan_name,
+            'services': {},
+            'groups': app_groups,
+            'groupSubtotal': {'monthly': round(plan_monthly, 2), 'upfront': 0},
+            'totalCost':     {'monthly': round(plan_monthly, 2), 'upfront': 0},
+        },
+    }
+
+    if include_fs:
+        top_groups[_calc_new_id('FoundationalService')] = {
+            'name': 'Foundational Services',
+            'services': _build_foundational_services(region, region_name),
+            'groups': {},
+            'groupSubtotal': {'monthly': EC2_TCO_FS_MONTHLY, 'upfront': 0},
+            'totalCost':     {'monthly': EC2_TCO_FS_MONTHLY, 'upfront': 0},
+        }
+
+    total_monthly = round(plan_monthly + (EC2_TCO_FS_MONTHLY if include_fs else 0), 2)
+    return {
+        'name': estimate_name,
+        'services': {},
+        'groups': top_groups,
+        'support': {},
+        'metaData': {
+            'locale': 'en_US',
+            'currency': 'USD',
+            'createdOn': datetime.now().isoformat(),
+            'source': 'calculator-platform',
+        },
+        'totalCost':     {'monthly': total_monthly, 'upfront': 0},
+        'groupSubtotal': {'monthly': total_monthly, 'upfront': 0},
+    }
+
+
+def _extract_estimate_id(response_body):
+    """Extract savedKey from AWS Calculator saveAs response."""
+    import re
+    if isinstance(response_body, str):
+        try:
+            response_body = json.loads(response_body)
+        except Exception:
+            return ''
+    # Response may be double-wrapped: {body: "...json string..."}
+    inner = response_body
+    if isinstance(response_body.get('body'), str):
+        try:
+            inner = json.loads(response_body['body'])
+        except Exception:
+            pass
+    key = str(inner.get('savedKey', '') or '').strip()
+    if re.match(r'^[a-f0-9]{32,64}$', key, re.IGNORECASE):
+        return key
+    return ''
+
+
+def _call_saveas(payload):
+    """POST payload to AWS Calculator saveAs and return savedKey."""
+    import urllib.request, urllib.error
+    body = json.dumps(payload).encode('utf-8')
+    req = urllib.request.Request(
+        'https://dnd5zrqcec4or.cloudfront.net/Prod/v2/saveAs',
+        data=body,
+        headers={
+            'Content-Type':  'application/json',
+            'Content-Length': str(len(body)),
+            'Origin':        'https://calculator.aws',
+            'Referer':       'https://calculator.aws/',
+            'User-Agent':    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36',
+            'Accept':        'application/json, text/plain, */*',
+        },
+        method='POST',
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        raw = json.loads(resp.read())
+    key = _extract_estimate_id(raw)
+    if not key:
+        raise ValueError(f"AWS Calculator did not return a valid savedKey. Response: {str(raw)[:200]}")
+    return key
+
+
+@app.route('/api/clients/<client_id>/runs/<run_id>/generate_calculator', methods=['POST'])
+def generate_calculator_estimate(client_id, run_id):
+    """
+    Build AWS Calculator estimates for a completed run and return the URLs.
+    Uses the run's stored VM snapshot — no re-upload needed.
+    Scenarios: On-Demand, 1-Year No Upfront, 3-Year No Upfront.
+    """
+    clients = load_clients()
+    client  = next((c for c in clients if c['id'] == client_id), None)
+    if not client: return jsonify({'error': 'Client not found'}), 404
+    run = next((r for r in client['runs'] if r['id'] == run_id), None)
+    if not run: return jsonify({'error': 'Run not found'}), 404
+
+    body_data   = request.get_json(silent=True) or {}
+    include_fs  = body_data.get('include_fs', True)
+    region      = run.get('aws_region') or run.get('collection') or 'us-east-1'
+    client_name = client.get('name', 'Assessment')
+    estimate_name = body_data.get('estimate_name') or f"{client_name} - AWS TCO"
+
+    # Load vm snapshot stored at run time
+    vm_snapshot = run.get('vm_snapshot', [])
+    if not vm_snapshot:
+        return jsonify({'error': 'No VM snapshot found for this run. Please re-run the optimizer to enable calculator generation.'}), 400
+
+    scenarios = [
+        ('on_demand', 'On-Demand'),
+        ('sp_1yr',    '1 Year No Upfront'),
+        ('sp_3yr',    '3 Year No Upfront'),
+    ]
+    results = {}
+    errors  = []
+    for scenario_key, label in scenarios:
+        try:
+            payload  = _build_calculator_payload(
+                f"{estimate_name} - {label}", scenario_key, region, vm_snapshot, include_fs
+            )
+            saved_key = _call_saveas(payload)
+            results[scenario_key] = {
+                'label': label,
+                'url':   f'https://calculator.aws/#/estimate?id={saved_key}',
+                'key':   saved_key,
+            }
+        except Exception as e:
+            errors.append(f"{label}: {e}")
+
+    if errors and not results:
+        return jsonify({'error': '\n'.join(errors)}), 502
+
+    return jsonify({'urls': results, 'errors': errors, 'region': region})
+
+
 @app.route('/api/clients/<client_id>/runs/<run_id>/download_smc')
 def download_run_smc(client_id, run_id):
     """Download the SMC service discovery workbook (AWS_SMC_*.xlsx or Azure_SMC_*.xlsx)."""
@@ -1872,6 +2358,25 @@ def handle_start_run(data):
             report_path.write_text(html_report, encoding='utf-8')
 
             # ── Step 9: Save client record ────────────────────────────────────
+            # Build a compact VM snapshot for the Calculator payload builder
+            _vm_snapshot = []
+            for i, row in enumerate(records):
+                inst_type = aws_insts[i] if i < len(aws_insts) else None
+                if not inst_type:
+                    continue
+                od_ph = ph_list[i] if i < len(ph_list) else None
+                _vm_snapshot.append({
+                    'hostname':      str(row.get('VM Name', '') or row.get('Hostname', '') or f'VM-{i+1}'),
+                    'instance_type': str(inst_type),
+                    'os':            str(row.get('Operating System', 'Linux') or 'Linux'),
+                    'tenancy':       str(row.get('Tenancy', 'Shared') or 'Shared'),
+                    'quantity':      1,
+                    'ebs_type':      'gp3',
+                    'ebs_gb':        100,
+                    'od_price_per_hr': float(od_ph) if od_ph else 0.0,
+                    'app_name':      str(row.get('Group', '') or row.get('Application', '') or 'Rehost'),
+                })
+
             _bulk_files_list = bulk_files if len(records) > 4000 else [bulk_fn]
             run_meta = {
                 'id': run_id, 'timestamp': datetime.now().isoformat(),
@@ -1881,9 +2386,11 @@ def handle_start_run(data):
                 'report_filename': report_fn, 'report_path': str(report_path),
                 'smc_filename': smc_fn, 'smc_path': str(smc_path),
                 'input_rows': total_rows, 'collection': aws_coll_name,
+                'aws_region': aws_coll_name,
                 'purchase_key': purchase_key, 'calc_mode': calc_mode, 'min_generation': min_gen_pref,
                 'suggested_top_group': suggested_top_group, 'ec2_group_name': ec2_group_name,
                 'summary': summary,
+                'vm_snapshot': _vm_snapshot,
             }
             client_rec = upsert_client_run(client_name, run_meta)
 

@@ -635,9 +635,10 @@ html,body{width:100%;height:100vh;background:var(--bg);font-family:'Outfit',sans
           </div>
         </div>
         <div style="font-size:10px;color:var(--t4);margin-top:8px;line-height:1.6">
-          AWS doesn't expose a public API to create estimates or share-links from outside the console, so this one step still has to happen in the Calculator UI. Click below — it copies the group name to your clipboard AND opens the Calculator in a new tab, so you just paste.
+          Click below to auto-generate pre-populated AWS Pricing Calculator estimates for all three pricing scenarios (On-Demand, 1-Year RI, 3-Year RI) and open them in new tabs.
         </div>
-        <button onclick="generateAndOpenSMC()" id="smcBtn" style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:7px 14px;background:linear-gradient(135deg,rgba(255,153,0,.2),rgba(255,153,0,.1));border:1px solid rgba(255,153,0,.35);border-radius:7px;color:var(--aws);font-size:12px;font-weight:700;cursor:pointer;font-family:Outfit,sans-serif;transition:.2s;box-shadow:0 2px 10px rgba(255,153,0,.15)" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 18px rgba(255,153,0,.35)'" onmouseout="this.style.transform='';this.style.boxShadow='0 2px 10px rgba(255,153,0,.15)'"><i class="fa-solid fa-bolt" style="font-size:11px"></i>Generate &amp; Open SMC Estimate</button>
+        <button onclick="generateCalculatorEstimate()" id="smcBtn" style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:7px 14px;background:linear-gradient(135deg,rgba(255,153,0,.2),rgba(255,153,0,.1));border:1px solid rgba(255,153,0,.35);border-radius:7px;color:var(--aws);font-size:12px;font-weight:700;cursor:pointer;font-family:Outfit,sans-serif;transition:.2s;box-shadow:0 2px 10px rgba(255,153,0,.15)" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 18px rgba(255,153,0,.35)'" onmouseout="this.style.transform='';this.style.boxShadow='0 2px 10px rgba(255,153,0,.15)'"><i class="fa-solid fa-bolt" style="font-size:11px"></i>Generate AWS Calculator Estimates</button>
+        <div id="calcUrlPanel" style="display:none;margin-top:10px;padding:10px;background:rgba(255,153,0,.07);border:1px solid rgba(255,153,0,.2);border-radius:7px;font-size:11px"></div>
       </div>
       <div class="dl-cols">
         <span class="dct">vCPU</span><span class="dct">Memory</span><span class="dct">Operating System</span><span class="dct">Production Servers</span><span class="dct">Tenancy</span><span class="dct">License Model</span><span class="dct">Pre Installed S/W</span><span class="dct">VM</span><span class="dct">Group</span>
@@ -1043,19 +1044,56 @@ function copyHint(elId, btn){
   }).catch(()=>{ alert('Copy failed — please select and copy manually: '+text); });
 }
 
-function generateAndOpenSMC(){
-  const topGroup = document.getElementById('hintTopGroup').textContent;
-  const btn = document.getElementById('smcBtn');
+async function generateCalculatorEstimate(){
+  const btn  = document.getElementById('smcBtn');
+  const panel = document.getElementById('calcUrlPanel');
   const orig = btn.innerHTML;
-  navigator.clipboard.writeText(topGroup).then(()=>{
-    btn.innerHTML = '<i class="fa-solid fa-check" style="font-size:11px"></i>Copied "'+topGroup+'" — opening Calculator...';
-    window.open('https://calculator.aws/#/estimate','_blank','noopener');
-    setTimeout(()=>{ btn.innerHTML = orig; }, 3500);
-  }).catch(()=>{
-    // Clipboard blocked (e.g. non-HTTPS) — still open the Calculator, just tell them to copy manually
-    window.open('https://calculator.aws/#/estimate','_blank','noopener');
-    alert('Could not auto-copy (browser blocked clipboard access). Please copy this name manually:\n\n'+topGroup);
-  });
+  // Read current run context from the button's closest dashboard card
+  const clientId = window._calcClientId;
+  const runId    = window._calcRunId;
+  if(!clientId || !runId){
+    alert('No run selected. Please run the optimizer first.');
+    return;
+  }
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="font-size:11px"></i>Building estimates…';
+  panel.style.display = 'none';
+  panel.innerHTML = '';
+  try {
+    const resp = await fetch('/api/clients/'+clientId+'/runs/'+runId+'/generate_calculator', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({include_fs: true}),
+    });
+    const data = await resp.json();
+    if(!resp.ok || (!data.urls && !data.error)){
+      throw new Error(data.error || 'Server returned an error ('+resp.status+')');
+    }
+    if(data.error && !data.urls){
+      throw new Error(data.error);
+    }
+    // Show URLs
+    const urls = data.urls || {};
+    const labels = {on_demand:'On-Demand', sp_1yr:'1-Year No Upfront RI', sp_3yr:'3-Year No Upfront RI'};
+    let html = '<div style="font-weight:700;color:var(--aws);margin-bottom:6px"><i class="fa-solid fa-check-circle"></i> Estimates ready — opening in new tabs…</div>';
+    Object.entries(urls).forEach(([k,v])=>{
+      html += '<div style="margin:3px 0"><a href="'+v.url+'" target="_blank" rel="noopener" style="color:var(--aws);text-decoration:none;font-weight:600">'+(labels[k]||k)+'</a><span style="color:var(--t3);margin-left:6px;font-size:10px">↗ '+v.url+'</span></div>';
+    });
+    if(data.errors && data.errors.length){
+      html += '<div style="color:#ff6b6b;margin-top:6px;font-size:10px">Partial errors: '+data.errors.join('; ')+'</div>';
+    }
+    panel.innerHTML = html;
+    panel.style.display = 'block';
+    // Open each URL in a new tab
+    Object.values(urls).forEach((v,i)=>{ setTimeout(()=>window.open(v.url,'_blank','noopener'), i*400); });
+    btn.innerHTML = '<i class="fa-solid fa-check" style="font-size:11px"></i>Estimates Generated';
+    setTimeout(()=>{ btn.innerHTML = orig; btn.disabled = false; }, 5000);
+  } catch(e){
+    panel.innerHTML = '<div style="color:#ff6b6b"><i class="fa-solid fa-triangle-exclamation"></i> '+e.message+'</div>';
+    panel.style.display = 'block';
+    btn.innerHTML = orig;
+    btn.disabled = false;
+  }
 }
 function fmt(v){if(v==null||v===undefined)return'—';if(v>=1e6)return'$'+(v/1e6).toFixed(2)+'M';if(v>=1000)return'$'+(v/1000).toFixed(1)+'K';return'$'+Math.round(v).toLocaleString();}
 function fmtG(v){if(v>=1000)return(v/1000).toFixed(1)+'T GiB';return Math.round(v).toLocaleString()+' GiB';}
@@ -1069,6 +1107,12 @@ function donut(id,labels,data,colors,legId){
 
 // RENDER DASHBOARD
 function renderDash(s,clientId,runId,filename,bulkFn,reportFn,smcFn,bulkFiles){
+  // Store for generateCalculatorEstimate()
+  window._calcClientId = clientId;
+  window._calcRunId    = runId;
+  // Reset calculator panel on new run
+  const calcPanel = document.getElementById('calcUrlPanel');
+  if(calcPanel){ calcPanel.style.display='none'; calcPanel.innerHTML=''; }
   const n=s.total_rows;
   document.getElementById('dlFilename').textContent=filename;
   const cmLabel={'like_to_like':'LIKE-TO-LIKE','optimized_n1':'OPTIMIZED N-1','optimized_n2':'OPTIMIZED N-2','utilization_based':'UTILIZATION BASED'}[s.calc_mode]||'';
