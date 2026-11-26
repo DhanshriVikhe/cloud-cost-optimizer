@@ -1,0 +1,23 @@
+﻿Estimate summary
+Upfront cost,Monthly cost,Total 12 months cost,Currency
+0,1016.26,12195.12,USD
+,,* Includes upfront cost
+
+
+Detailed Estimate
+Group hierarchy,Region,Description,Service,Upfront,Monthly,First 12 months total,Currency,Status,Configuration summary
+My Estimate > Aventive Rehost ARR 3 Year LI > Foundational Services,US East (N. Virginia),Cloud Trail,AWS CloudTrail,0,109.69999999999999,1316.40,USD,,"Management events units (millions), Management event trails (2), Read management trails (2), Data events units (millions), S3 trails (2), Lambda trails (2), Insight events units (millions), Number of trails and/or event data stores where Insights events are enabled (2), Number of management events (2 per month), Read management events (2 per month), S3 operations (2.7 per month), Lambda data events (2.7 per month), Total number of management API calls (both read and write) to be analyzed for unusual activity (2.7 per month), Network activity events units (millions)"
+My Estimate > Aventive Rehost ARR 3 Year LI > Foundational Services,US East (N. Virginia),"Multiple Environments - Dev, Stage and Prod",AWS Config,0,23.031,276.37,USD,,"Number of Continuous Configuration items recorded (2000), Number of Config rule evaluations (17000), Number of Conformance pack evaluations (31)"
+My Estimate > Aventive Rehost ARR 3 Year LI > Foundational Services,US East (N. Virginia),"Multiple Environments - Dev, Stage and Prod",AWS Key Management Service,0,44.5639,534.77,USD,,"Number of customer managed Customer Master Keys (CMK) (43), Number of symmetric requests (521288)"
+My Estimate > Aventive Rehost ARR 3 Year LI > Foundational Services,US East (N. Virginia),"Dev, QA, Staging, Production",S3 Standard,0,0,0.00,USD,,
+My Estimate > Aventive Rehost ARR 3 Year LI > Foundational Services,US East (N. Virginia),"Dev, QA, Staging, Production",Data Transfer,0,143.36,1720.32,USD,,"DT Inbound: Internet (7 TB per month), DT Inbound: All other regions (7 TB per month), DT Outbound: Amazon CloudFront (7 TB per month)"
+My Estimate > Aventive Rehost ARR 3 Year LI > Foundational Services,US East (N. Virginia),"Dev, QA, Staging, Production",Transit Gateway,0,73.96000000000001,887.52,USD,,"Number of Transit Gateway attachments (2), Number of Multicast Receivers (14)"
+My Estimate > Aventive Rehost ARR 3 Year LI > Foundational Services,US East (N. Virginia),"Dev, QA, Staging, Production",AWS Security Hub,0,383.85,4606.20,USD,,"Number of Accounts (9), Number of Security Checks per Account (30000), Number of Finding Ingested per Account (1000), Number of Automation Rules (1000), Number of criteria in each automation rule (5)"
+My Estimate > Aventive Rehost ARR 3 Year LI > Foundational Services,US East (N. Virginia),Amazon Route 53,Amazon Route 53,0,25.5,306.00,USD,,"Hosted Zones (1), Basic Checks Within AWS (100)"
+My Estimate > Aventive Rehost ARR 3 Year LI > Foundational Services,US East (N. Virginia),Amazon CloudFront ,Amazon CloudFront,0,10.5,126.00,USD,,"Data transfer out to internet (100 GB per month), Data transfer out to origin (100 GB per month), Number of requests (HTTPS) (1 per month)"
+My Estimate > Aventive Rehost ARR 3 Year LI > Foundational Services,US East (N. Virginia),AWS Web Application Firewall (WAF),AWS Web Application Firewall (WAF),0,201.8,2421.60,USD,,"Number of Web Access Control Lists (Web ACLs) utilized (5 per month), Number of Rules added per Web ACL (5 per month), Number of Rule Groups per Web ACL (5 per month), Number of Rules inside each Rule Group (3 per month), Number of Managed Rule Groups per Web ACL (10 per month)"
+
+
+
+Acknowledgement
+"* AWS Pricing Calculator provides only an estimate of your AWS fees and doesn't include any taxes that might apply. Your actual fees depend on a variety of factors, including your actual usage of AWS services."
